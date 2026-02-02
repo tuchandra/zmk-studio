@@ -7,7 +7,7 @@
 import { DeviceTreeParser } from './DeviceTreeParser';
 import { ReverseBehaviorMapper } from './ReverseBehaviorMapper';
 import { ReverseHidMapper } from './ReverseHidMapper';
-import type { ImportResult, ImportError, ConvertedBinding, ValidationResult } from './types';
+import type { ImportResult, ConvertedBinding, ValidationResult } from './types';
 import { ImportErrorCode } from './types';
 
 export class ImportService {

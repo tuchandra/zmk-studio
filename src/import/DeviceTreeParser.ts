@@ -4,7 +4,7 @@
  * Parses ZMK firmware keymap files in DeviceTree format
  */
 
-import type { ParseResult, ParsedLayer, KeymapMetadata, ParseError } from './types';
+import type { ParseResult, ParsedLayer, KeymapMetadata } from './types';
 import { ParseErrorCode } from './types';
 
 /**

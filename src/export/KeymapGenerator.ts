@@ -5,7 +5,7 @@
  * for compilation with the ZMK firmware builder.
  */
 
-import { Keymap, ExportedKeymap, ExportMetadata, Layer } from './types';
+import { Keymap, ExportMetadata, Layer } from './types';
 import { BehaviorMapper, BehaviorRegistryEntry } from './BehaviorMapper';
 import { HidMapper } from './HidMapper';
 

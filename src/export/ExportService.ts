@@ -5,7 +5,7 @@
  * and triggers browser download. Also supports copy-to-clipboard for faster iteration.
  */
 
-import { Keymap, Layer, Binding, ExportResult, ExportErrorCode } from './types';
+import { Keymap, Layer, ExportResult, ExportErrorCode } from './types';
 import { KeymapGenerator, BehaviorRegistry } from './KeymapGenerator';
 
 export class ExportService {
