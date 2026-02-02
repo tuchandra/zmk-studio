@@ -2,10 +2,19 @@ import { AppHeader } from "./AppHeader";
 
 import { create_rpc_connection } from "@zmkfirmware/zmk-studio-ts-client";
 import { call_rpc } from "./rpc/logging";
+import { ExportService } from "./export/ExportService";
+import { ImportService } from "./import/ImportService";
+import { Layer } from "./export/types";
+import { BehaviorRegistry } from "./export/KeymapGenerator";
+import { Keymap } from "@zmkfirmware/zmk-studio-ts-client/keymap";
+import type { GetBehaviorDetailsResponse } from "@zmkfirmware/zmk-studio-ts-client/behaviors";
+
+// Type for the behaviors map from Keyboard component
+type BehaviorMap = Record<number, GetBehaviorDetailsResponse>;
 
 import type { Notification } from "@zmkfirmware/zmk-studio-ts-client/studio";
 import { ConnectionState, ConnectionContext } from "./rpc/ConnectionContext";
-import { Dispatch, useCallback, useEffect, useState } from "react";
+import React, { Dispatch, useCallback, useEffect, useState } from "react";
 import { ConnectModal, TransportFactory } from "./ConnectModal";
 
 import type { RpcTransport } from "@zmkfirmware/zmk-studio-ts-client/transport/index";
@@ -169,10 +178,24 @@ function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showLicenseNotice, setShowLicenseNotice] = useState(false);
   const [connectionAbort, setConnectionAbort] = useState(new AbortController());
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   const [lockState, setLockState] = useState<LockState>(
     LockState.ZMK_STUDIO_CORE_LOCK_STATE_LOCKED
   );
+
+  // Store keymap ref from Keyboard component
+  const keymapRef = React.useRef<Keymap | undefined>(undefined);
+  const setKeymapForExport = React.useCallback((km: Keymap | undefined) => {
+    keymapRef.current = km;
+  }, []);
+
+  // Store behaviors ref from Keyboard component for export
+  const behaviorsRef = React.useRef<BehaviorMap>({});
+  const setBehaviorsForExport = React.useCallback((behaviors: BehaviorMap) => {
+    behaviorsRef.current = behaviors;
+  }, []);
 
   useSub("rpc_notification.core.lockStateChanged", (ls) => {
     setLockState(ls);
@@ -271,6 +294,177 @@ function App() {
     doDisconnect();
   }, [conn]);
 
+  const exportKeymap = useCallback(() => {
+    async function doExport() {
+      const keymap = keymapRef.current;
+      const behaviors = behaviorsRef.current;
+      console.log("[Export] Button clicked", { connectedDeviceName, hasKeymap: !!keymap, hasBehaviors: Object.keys(behaviors).length > 0 });
+
+      if (!connectedDeviceName || !keymap) {
+        console.warn("Cannot export: no device connected or keymap not loaded", {
+          connectedDeviceName,
+          hasKeymap: !!keymap,
+          keymapLayers: keymap?.layers?.length
+        });
+        return;
+      }
+
+      console.log("[Export] Starting export...", { layerCount: keymap.layers.length, behaviorCount: Object.keys(behaviors).length });
+      setIsExporting(true);
+      try {
+        // Transform keymap data to Layer[] format for ExportService
+        const layers: Layer[] = keymap.layers.map((layer, index) => ({
+          id: index,
+          label: layer.name || `Layer ${index}`,
+          bindings: layer.bindings.map((binding, position) => ({
+            behaviorId: binding.behaviorId || 0,
+            param1: binding.param1 || 0,
+            param2: binding.param2,
+            position,
+          })),
+        }));
+
+        // Convert behaviors object to BehaviorRegistry Map
+        const behaviorRegistry: BehaviorRegistry = new Map(
+          Object.entries(behaviors).map(([id, behavior]) => [
+            parseInt(id, 10),
+            { id: behavior.id, displayName: behavior.displayName, metadata: behavior.metadata }
+          ])
+        );
+
+        // Export to file using the behavior registry
+        const result = await ExportService.exportKeymapWithRegistry(connectedDeviceName, layers, behaviorRegistry);
+
+        if (result.success) {
+          console.log(`Export successful: ${result.filename}`);
+          // TODO: Show success toast notification
+        } else {
+          console.error(`Export failed: ${result.error?.message}`);
+          // TODO: Show error toast notification
+        }
+      } catch (error) {
+        console.error("Export error:", error);
+        // TODO: Show error toast notification
+      } finally {
+        setIsExporting(false);
+      }
+    }
+
+    doExport();
+  }, [connectedDeviceName]);
+
+  const copyKeymapToClipboard = useCallback(() => {
+    async function doCopy() {
+      const keymap = keymapRef.current;
+      const behaviors = behaviorsRef.current;
+
+      if (!connectedDeviceName || !keymap) {
+        console.warn("Cannot copy: no device connected or keymap not loaded");
+        return;
+      }
+
+      try {
+        // Transform keymap data to Layer[] format for ExportService
+        const layers: Layer[] = keymap.layers.map((layer, index) => ({
+          id: index,
+          label: layer.name || `Layer ${index}`,
+          bindings: layer.bindings.map((binding, position) => ({
+            behaviorId: binding.behaviorId || 0,
+            param1: binding.param1 || 0,
+            param2: binding.param2,
+            position,
+          })),
+        }));
+
+        // Convert behaviors object to BehaviorRegistry Map
+        const behaviorRegistry: BehaviorRegistry = new Map(
+          Object.entries(behaviors).map(([id, behavior]) => [
+            parseInt(id, 10),
+            { id: behavior.id, displayName: behavior.displayName, metadata: behavior.metadata }
+          ])
+        );
+
+        // Copy to clipboard using the behavior registry
+        const result = await ExportService.copyToClipboardWithRegistry(connectedDeviceName, layers, behaviorRegistry);
+
+        if (result.success) {
+          console.log(`Keymap copied to clipboard (${result.content?.length} chars)`);
+        } else {
+          console.error(`Copy failed: ${result.error?.message}`);
+        }
+      } catch (error) {
+        console.error("Copy error:", error);
+      }
+    }
+
+    doCopy();
+  }, [connectedDeviceName]);
+
+  // Keyboard shortcut: Cmd/Ctrl+Shift+C to copy keymap to clipboard
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'c') {
+        e.preventDefault();
+        copyKeymapToClipboard();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [copyKeymapToClipboard]);
+
+  const importKeymap = useCallback(async (file: File) => {
+    if (!conn.conn || !connectedDeviceName) {
+      console.warn("Cannot import: no device connected");
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      // Read file content
+      const content = await file.text();
+
+      // Import and parse the keymap
+      const result = await ImportService.importFromString(content);
+
+      if (!result.success || !result.layers) {
+        console.error(`Import failed: ${result.error?.message}`);
+        // TODO: Show error toast notification
+        return;
+      }
+
+      // Apply imported layers to the keyboard
+      for (const layer of result.layers) {
+        for (const binding of layer.bindings) {
+          await call_rpc(conn.conn, {
+            keymap: {
+              setLayerBinding: {
+                layerId: layer.id,
+                keyPosition: binding.position,
+                binding: {
+                  behaviorId: binding.behaviorId,
+                  param1: binding.param1 || 0,
+                  param2: binding.param2 ?? 0,
+                },
+              },
+            },
+          });
+        }
+      }
+
+      // Trigger UI refresh by updating connection state (causes useConnectedDeviceData to re-fetch)
+      setConn({ conn: conn.conn });
+
+      console.log(`Import successful: ${result.layers.length} layers imported`);
+      // TODO: Show success toast notification
+    } catch (error) {
+      console.error("Import error:", error);
+      // TODO: Show error toast notification
+    } finally {
+      setIsImporting(false);
+    }
+  }, [conn, connectedDeviceName]);
+
   const onConnect = useCallback(
     (t: RpcTransport) => {
       const ac = new AbortController();
@@ -306,8 +500,13 @@ function App() {
               onDiscard={discard}
               onDisconnect={disconnect}
               onResetSettings={resetSettings}
+              onExport={exportKeymap}
+              onCopyToClipboard={copyKeymapToClipboard}
+              isExporting={isExporting}
+              onImport={importKeymap}
+              isImporting={isImporting}
             />
-            <Keyboard />
+            <Keyboard onKeymapChange={setKeymapForExport} onBehaviorsChange={setBehaviorsForExport} />
             <AppFooter
               onShowAbout={() => setShowAbout(true)}
               onShowLicenseNotice={() => setShowLicenseNotice(true)}

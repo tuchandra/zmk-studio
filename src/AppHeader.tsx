@@ -15,6 +15,9 @@ import { ConnectionContext } from "./rpc/ConnectionContext";
 import { ChevronDown, Undo2, Redo2, Save, Trash2 } from "lucide-react";
 import { Tooltip } from "./misc/Tooltip";
 import { GenericModal } from "./GenericModal";
+import { ExportButton } from "./export/ExportButton";
+import { CopyButton } from "./export/CopyButton";
+import { ImportButton } from "./import/ImportButton";
 
 export interface AppHeaderProps {
   connectedDeviceLabel?: string;
@@ -24,8 +27,13 @@ export interface AppHeaderProps {
   onRedo?: () => Promise<void>;
   onResetSettings?: () => void | Promise<void>;
   onDisconnect?: () => void | Promise<void>;
+  onExport?: () => void | Promise<void>;
+  onCopyToClipboard?: () => void | Promise<void>;
+  onImport?: (file: File) => void | Promise<void>;
   canUndo?: boolean;
   canRedo?: boolean;
+  isExporting?: boolean;
+  isImporting?: boolean;
 }
 
 export const AppHeader = ({
@@ -38,6 +46,11 @@ export const AppHeader = ({
   onDiscard,
   onDisconnect,
   onResetSettings,
+  onExport,
+  onCopyToClipboard,
+  onImport,
+  isExporting = false,
+  isImporting = false,
 }: AppHeaderProps) => {
   const [showSettingsReset, setShowSettingsReset] = useState(false);
 
@@ -164,6 +177,26 @@ export const AppHeader = ({
             <Trash2 className="inline-block w-4 mx-1" aria-label="Discard" />
           </Button>
         </Tooltip>
+        {onImport && (
+          <ImportButton
+            onImport={onImport}
+            isImporting={isImporting}
+            disabled={!connectedDeviceLabel}
+          />
+        )}
+        {onCopyToClipboard && (
+          <CopyButton
+            onCopy={onCopyToClipboard}
+            disabled={!connectedDeviceLabel}
+          />
+        )}
+        {onExport && (
+          <ExportButton
+            onExport={onExport}
+            isExporting={isExporting}
+            disabled={!connectedDeviceLabel}
+          />
+        )}
       </div>
     </header>
   );

@@ -1,0 +1,473 @@
+/**
+ * Unit tests for ExportService
+ *
+ * Tests keymap export orchestration and file generation
+ */
+
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ExportService } from './ExportService';
+import type { Layer } from './types';
+import { ExportErrorCode } from './types';
+
+// Mock DOM APIs for file download
+const mockCreateObjectURL = vi.fn(() => 'blob:mock-url');
+const mockRevokeObjectURL = vi.fn();
+const mockClick = vi.fn();
+const mockAppendChild = vi.fn();
+const mockRemoveChild = vi.fn();
+
+// Setup URL mocks
+if (typeof global.URL === 'undefined') {
+  (global as any).URL = {};
+}
+global.URL.createObjectURL = mockCreateObjectURL;
+global.URL.revokeObjectURL = mockRevokeObjectURL;
+
+// Setup document mocks (only if document exists)
+if (typeof global.document !== 'undefined') {
+  global.document.createElement = vi.fn((tag: string) => {
+    if (tag === 'a') {
+      return {
+        href: '',
+        download: '',
+        click: mockClick,
+      } as any;
+    }
+    return {} as any;
+  });
+
+  if (global.document.body) {
+    global.document.body.appendChild = mockAppendChild;
+    global.document.body.removeChild = mockRemoveChild;
+  }
+}
+
+describe('ExportService', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const sampleLayers: Layer[] = [
+    {
+      id: 0,
+      label: 'Default',
+      bindings: [
+        { behaviorId: 0, param1: 0, param2: null, position: 0 },
+        { behaviorId: 0, param1: 0, param2: null, position: 1 },
+      ],
+    },
+    {
+      id: 1,
+      label: 'Lower',
+      bindings: [
+        { behaviorId: 0, param1: 0, param2: null, position: 0 },
+      ],
+    },
+  ];
+
+  describe('exportKeymap', () => {
+    it('should successfully export keymap', async () => {
+      const result = await ExportService.exportKeymap('test-keyboard', sampleLayers);
+
+      expect(result.success).toBe(true);
+      expect(result.filename).toBeTruthy();
+      expect(result.filename).toMatch(/test-keyboard-\d{4}-\d{2}-\d{2}\.keymap/);
+      expect(result.content).toBeTruthy();
+      expect(result.content).toContain('Exported from ZMK Studio');
+      expect(result.content).toContain('Device: test-keyboard');
+    });
+
+    it('should trigger file download', async () => {
+      await ExportService.exportKeymap('corne', sampleLayers);
+
+      // Should create blob URL
+      expect(mockCreateObjectURL).toHaveBeenCalled();
+
+      // Should create and click anchor element
+      expect(mockClick).toHaveBeenCalled();
+
+      // Should append and remove anchor from DOM
+      expect(mockAppendChild).toHaveBeenCalled();
+      expect(mockRemoveChild).toHaveBeenCalled();
+
+      // Should cleanup blob URL
+      expect(mockRevokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
+    });
+
+    it('should generate correct filename format', async () => {
+      const result = await ExportService.exportKeymap('My Awesome Keyboard', sampleLayers);
+
+      expect(result.filename).toMatch(/my-awesome-keyboard-\d{4}-\d{2}-\d{2}\.keymap/);
+    });
+
+    it('should sanitize device name in filename', async () => {
+      const result = await ExportService.exportKeymap('Test@#$%Keyboard!!!', sampleLayers);
+
+      // Should remove special characters and normalize to lowercase
+      expect(result.filename).toMatch(/test-keyboard-\d{4}-\d{2}-\d{2}\.keymap/);
+    });
+
+    it('should return error when device name is empty', async () => {
+      const result = await ExportService.exportKeymap('', sampleLayers);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(ExportErrorCode.NO_KEYBOARD);
+      expect(result.error?.message).toContain('Device name is required');
+    });
+
+    it('should return error when device name is whitespace only', async () => {
+      const result = await ExportService.exportKeymap('   ', sampleLayers);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(ExportErrorCode.NO_KEYBOARD);
+    });
+
+    it('should return error when layers array is empty', async () => {
+      const result = await ExportService.exportKeymap('test-keyboard', []);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(ExportErrorCode.INVALID_LAYER);
+      expect(result.error?.message).toContain('No layers available');
+    });
+
+    it('should return error when layers is null', async () => {
+      const result = await ExportService.exportKeymap('test-keyboard', null as any);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(ExportErrorCode.INVALID_LAYER);
+    });
+
+    it('should handle layers with no bindings', async () => {
+      const emptyLayers: Layer[] = [
+        { id: 0, label: 'Empty', bindings: [] },
+      ];
+
+      const result = await ExportService.exportKeymap('test', emptyLayers);
+
+      // Should still succeed even with empty bindings
+      expect(result.success).toBe(true);
+      expect(result.content).toContain('Empty');
+    });
+
+    it('should calculate total bindings correctly', async () => {
+      const result = await ExportService.exportKeymap('test', sampleLayers);
+
+      expect(result.success).toBe(true);
+      // Sample has 2 bindings in first layer + 1 in second = 3 total
+      expect(result.content).toBeTruthy();
+    });
+
+    it('should include current timestamp in generated keymap', async () => {
+      const beforeExport = new Date();
+      const result = await ExportService.exportKeymap('test', sampleLayers);
+      const afterExport = new Date();
+
+      expect(result.success).toBe(true);
+      expect(result.content).toContain('Date:');
+
+      // Extract timestamp from content
+      const dateMatch = result.content?.match(/Date: (.+)/);
+      expect(dateMatch).toBeTruthy();
+      const exportDate = new Date(dateMatch![1]);
+
+      // Timestamp should be between before and after
+      expect(exportDate.getTime()).toBeGreaterThanOrEqual(beforeExport.getTime());
+      expect(exportDate.getTime()).toBeLessThanOrEqual(afterExport.getTime());
+    });
+
+    it('should handle export with multiple layers', async () => {
+      const manyLayers: Layer[] = [
+        { id: 0, label: 'Default', bindings: [] },
+        { id: 1, label: 'Lower', bindings: [] },
+        { id: 2, label: 'Raise', bindings: [] },
+        { id: 3, label: 'Function', bindings: [] },
+      ];
+
+      const result = await ExportService.exportKeymap('test', manyLayers);
+
+      expect(result.success).toBe(true);
+      expect(result.content).toContain('Layers: 4');
+      expect(result.content).toContain('default_layer');
+      expect(result.content).toContain('lower_layer');
+      expect(result.content).toContain('raise_layer');
+      expect(result.content).toContain('function_layer');
+    });
+
+    it('should include version information', async () => {
+      const result = await ExportService.exportKeymap('test', sampleLayers);
+
+      expect(result.success).toBe(true);
+      expect(result.content).toContain('Version: 1.0.0');
+    });
+
+    it('should handle errors during generation gracefully', async () => {
+      // Mock KeymapGenerator.generate to throw an error
+      const originalGenerate = (await import('./KeymapGenerator')).KeymapGenerator.generate;
+
+      // Temporarily replace with error-throwing version
+      (await import('./KeymapGenerator')).KeymapGenerator.generate = vi.fn(() => {
+        throw new Error('Test generation error');
+      });
+
+      const result = await ExportService.exportKeymap('test', sampleLayers);
+
+      // Should return error result
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(ExportErrorCode.GENERATION_FAILED);
+      expect(result.error?.message).toContain('Test generation error');
+
+      // Restore original function
+      (await import('./KeymapGenerator')).KeymapGenerator.generate = originalGenerate;
+    });
+
+    it('should handle non-Error exceptions during generation', async () => {
+      // Mock KeymapGenerator.generate to throw a non-Error object
+      const originalGenerate = (await import('./KeymapGenerator')).KeymapGenerator.generate;
+
+      (await import('./KeymapGenerator')).KeymapGenerator.generate = vi.fn(() => {
+        throw 'String error';
+      });
+
+      const result = await ExportService.exportKeymap('test', sampleLayers);
+
+      // Should return error with fallback message
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(ExportErrorCode.GENERATION_FAILED);
+      expect(result.error?.message).toContain('Unknown error');
+
+      // Restore
+      (await import('./KeymapGenerator')).KeymapGenerator.generate = originalGenerate;
+    });
+  });
+
+  // ============================================================================
+  // Dynamic Behavior Registry Tests
+  // ============================================================================
+  describe('exportKeymapWithRegistry', () => {
+    // Simulate a real keyboard's behavior registry with non-standard IDs
+    const mockBehaviorRegistry = new Map([
+      [8, { id: 8, displayName: 'Key Press', metadata: [] }],
+      [22, { id: 22, displayName: 'Momentary Layer', metadata: [] }],
+      [99, { id: 99, displayName: 'Transparent', metadata: [] }],
+    ]);
+
+    const layersWithNonStandardIds: Layer[] = [
+      {
+        id: 0,
+        label: 'BASE',
+        bindings: [
+          { behaviorId: 8, param1: (0x07 << 16) + 0x04, param2: null, position: 0 }, // Key Press (A)
+          { behaviorId: 22, param1: 1, param2: null, position: 1 }, // Momentary Layer 1
+          { behaviorId: 99, param1: 0, param2: null, position: 2 }, // Transparent
+        ],
+      },
+      {
+        id: 1,
+        label: 'NAV',
+        bindings: [
+          { behaviorId: 8, param1: (0x07 << 16) + 0x50, param2: null, position: 0 }, // Key Press (LEFT)
+        ],
+      },
+    ];
+
+    it('should export keymap using behavior registry', async () => {
+      const result = await ExportService.exportKeymapWithRegistry(
+        'Toucan',
+        layersWithNonStandardIds,
+        mockBehaviorRegistry
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.content).toContain('Device: Toucan');
+      // Should NOT contain "Unknown behavior" since we provided a registry
+      expect(result.content).not.toContain('Unknown behavior 8');
+      expect(result.content).not.toContain('Unknown behavior 22');
+      expect(result.content).not.toContain('Unknown behavior 99');
+    });
+
+    it('should format behaviors correctly with non-standard IDs', async () => {
+      const result = await ExportService.exportKeymapWithRegistry(
+        'Toucan',
+        layersWithNonStandardIds,
+        mockBehaviorRegistry
+      );
+
+      expect(result.success).toBe(true);
+      // behaviorId 8 = "Key Press" should produce &kp
+      expect(result.content).toContain('&kp A');
+      expect(result.content).toContain('&kp LEFT');
+      // behaviorId 22 = "Momentary Layer" should produce &mo
+      expect(result.content).toContain('&mo 1');
+      // behaviorId 99 = "Transparent" should produce &trans
+      expect(result.content).toContain('&trans');
+    });
+
+    it('should validate inputs same as regular exportKeymap', async () => {
+      // Empty device name
+      const result1 = await ExportService.exportKeymapWithRegistry('', layersWithNonStandardIds, mockBehaviorRegistry);
+      expect(result1.success).toBe(false);
+      expect(result1.error?.code).toBe(ExportErrorCode.NO_KEYBOARD);
+
+      // Empty layers
+      const result2 = await ExportService.exportKeymapWithRegistry('Toucan', [], mockBehaviorRegistry);
+      expect(result2.success).toBe(false);
+      expect(result2.error?.code).toBe(ExportErrorCode.INVALID_LAYER);
+    });
+
+    it('should generate correct filename', async () => {
+      const result = await ExportService.exportKeymapWithRegistry(
+        'My Toucan Keyboard',
+        layersWithNonStandardIds,
+        mockBehaviorRegistry
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.filename).toMatch(/my-toucan-keyboard-\d{4}-\d{2}-\d{2}\.keymap/);
+    });
+
+    it('should trigger file download', async () => {
+      vi.clearAllMocks();
+
+      await ExportService.exportKeymapWithRegistry(
+        'Toucan',
+        layersWithNonStandardIds,
+        mockBehaviorRegistry
+      );
+
+      expect(mockCreateObjectURL).toHaveBeenCalled();
+      expect(mockClick).toHaveBeenCalled();
+      expect(mockRevokeObjectURL).toHaveBeenCalled();
+    });
+
+    it('should fall back to hardcoded behaviors when registry is empty', async () => {
+      const layersWithStandardIds: Layer[] = [
+        {
+          id: 0,
+          label: 'Test',
+          bindings: [
+            { behaviorId: 1, param1: (0x07 << 16) + 0x04, param2: null, position: 0 }, // Standard kp ID
+            { behaviorId: 0, param1: 0, param2: null, position: 1 }, // Standard trans ID
+          ],
+        },
+      ];
+
+      const emptyRegistry = new Map();
+      const result = await ExportService.exportKeymapWithRegistry('Test', layersWithStandardIds, emptyRegistry);
+
+      expect(result.success).toBe(true);
+      expect(result.content).toContain('&kp A');
+      expect(result.content).toContain('&trans');
+    });
+  });
+
+  // ============================================================================
+  // Copy to Clipboard Tests
+  // ============================================================================
+  describe('copyToClipboard', () => {
+    const mockWriteText = vi.fn(() => Promise.resolve());
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      // Mock clipboard API
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: mockWriteText,
+        },
+      });
+    });
+
+    it('should copy keymap content to clipboard', async () => {
+      const result = await ExportService.copyToClipboard('test-keyboard', sampleLayers);
+
+      expect(result.success).toBe(true);
+      expect(mockWriteText).toHaveBeenCalled();
+      expect(result.content).toContain('Exported from ZMK Studio');
+    });
+
+    it('should return content without triggering download', async () => {
+      vi.clearAllMocks();
+      const result = await ExportService.copyToClipboard('test-keyboard', sampleLayers);
+
+      expect(result.success).toBe(true);
+      // Should NOT trigger download
+      expect(mockCreateObjectURL).not.toHaveBeenCalled();
+      expect(mockClick).not.toHaveBeenCalled();
+    });
+
+    it('should return error when device name is empty', async () => {
+      const result = await ExportService.copyToClipboard('', sampleLayers);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(ExportErrorCode.NO_KEYBOARD);
+    });
+
+    it('should return error when layers is empty', async () => {
+      const result = await ExportService.copyToClipboard('test', []);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(ExportErrorCode.INVALID_LAYER);
+    });
+
+    it('should handle clipboard write failure', async () => {
+      mockWriteText.mockRejectedValueOnce(new Error('Clipboard access denied'));
+
+      const result = await ExportService.copyToClipboard('test', sampleLayers);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(ExportErrorCode.GENERATION_FAILED);
+      expect(result.error?.message).toContain('Clipboard access denied');
+    });
+  });
+
+  describe('copyToClipboardWithRegistry', () => {
+    const mockWriteText = vi.fn(() => Promise.resolve());
+    const mockBehaviorRegistry = new Map([
+      [8, { id: 8, displayName: 'Key Press', metadata: [] }],
+      [99, { id: 99, displayName: 'Transparent', metadata: [] }],
+    ]);
+
+    const layersWithNonStandardIds: Layer[] = [
+      {
+        id: 0,
+        label: 'BASE',
+        bindings: [
+          { behaviorId: 8, param1: (0x07 << 16) + 0x04, param2: null, position: 0 },
+          { behaviorId: 99, param1: 0, param2: null, position: 1 },
+        ],
+      },
+    ];
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: mockWriteText,
+        },
+      });
+    });
+
+    it('should copy keymap with registry to clipboard', async () => {
+      const result = await ExportService.copyToClipboardWithRegistry(
+        'Toucan',
+        layersWithNonStandardIds,
+        mockBehaviorRegistry
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockWriteText).toHaveBeenCalled();
+      expect(result.content).toContain('&kp A');
+      expect(result.content).toContain('&trans');
+    });
+
+    it('should not trigger file download', async () => {
+      vi.clearAllMocks();
+      await ExportService.copyToClipboardWithRegistry(
+        'Toucan',
+        layersWithNonStandardIds,
+        mockBehaviorRegistry
+      );
+
+      expect(mockCreateObjectURL).not.toHaveBeenCalled();
+    });
+  });
+});
