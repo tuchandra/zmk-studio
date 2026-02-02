@@ -408,4 +408,108 @@ describe('BehaviorMapper', () => {
       expect(BehaviorMapper.getParamCountFromDisplayName('Unknown Behavior')).toBe(0);
     });
   });
+
+  // ============================================================================
+  // Modified Key Tests (keys with modifier flags in HID usage)
+  // ============================================================================
+  describe('formatBindingWithRegistry with modified keys', () => {
+    // Helper to create extended HID usage with modifiers
+    const hidMod = (modifiers: number, page: number, id: number) =>
+      ((modifiers & 0xFF) << 24) | ((page & 0xFF) << 16) | (id & 0xFFFF);
+
+    const KB = 0x07; // Keyboard page
+
+    const mockRegistry = new Map([
+      [8, { id: 8, displayName: 'Key Press', metadata: [] }],
+    ]);
+
+    // Mock that handles modified keys
+    const mockGetKeyNameWithModifiers = (hidUsage: number): string | null => {
+      // Import HidMapper to use getZmkKeyNameWithModifiers
+      // For testing, we'll simulate the expected behavior
+      const modifiers = (hidUsage >>> 24) & 0xFF;
+      const page = (hidUsage >>> 16) & 0xFF;
+      const id = hidUsage & 0xFFFF;
+
+      if (page !== 0x07) return null;
+
+      const baseKeys: Record<number, string> = {
+        0x04: 'A',
+        0x09: 'F',
+        0x1D: 'Z',
+        0x68: 'F13',
+      };
+
+      const keyName = baseKeys[id];
+      if (!keyName) return null;
+
+      if (modifiers === 0) return keyName;
+
+      const parts: string[] = [];
+      if (modifiers & 0x01) parts.push('LC(');
+      if (modifiers & 0x02) parts.push('LS(');
+      if (modifiers & 0x04) parts.push('LA(');
+      if (modifiers & 0x08) parts.push('LG(');
+      if (modifiers & 0x10) parts.push('RC(');
+      if (modifiers & 0x20) parts.push('RS(');
+      if (modifiers & 0x40) parts.push('RA(');
+      if (modifiers & 0x80) parts.push('RG(');
+
+      let count = 0;
+      let m = modifiers;
+      while (m) { count += m & 1; m >>>= 1; }
+
+      return `${parts.join('')}${keyName}${')'.repeat(count)}`;
+    };
+
+    it('should format key press with LA modifier (Alt+F13)', () => {
+      const usage = hidMod(0x04, KB, 0x68); // LA + F13
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 8, param1: usage, param2: null, position: 0 },
+        mockGetKeyNameWithModifiers,
+        mockRegistry
+      );
+      expect(result).toBe('&kp LA(F13)');
+    });
+
+    it('should format key press with LG modifier (GUI+Z)', () => {
+      const usage = hidMod(0x08, KB, 0x1D); // LG + Z
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 8, param1: usage, param2: null, position: 0 },
+        mockGetKeyNameWithModifiers,
+        mockRegistry
+      );
+      expect(result).toBe('&kp LG(Z)');
+    });
+
+    it('should format key press with Hyper modifier (LC+LS+LA+LG+F)', () => {
+      const usage = hidMod(0x0F, KB, 0x09); // LC+LS+LA+LG + F
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 8, param1: usage, param2: null, position: 0 },
+        mockGetKeyNameWithModifiers,
+        mockRegistry
+      );
+      expect(result).toBe('&kp LC(LS(LA(LG(F))))');
+    });
+
+    it('should format key press with LC+LA modifier (Ctrl+Alt+A)', () => {
+      const usage = hidMod(0x05, KB, 0x04); // LC + LA + A
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 8, param1: usage, param2: null, position: 0 },
+        mockGetKeyNameWithModifiers,
+        mockRegistry
+      );
+      expect(result).toBe('&kp LC(LA(A))');
+    });
+
+    it('should format plain key without modifiers', () => {
+      const usage = (KB << 16) | 0x04; // Just A, no modifiers
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 8, param1: usage, param2: null, position: 0 },
+        mockGetKeyNameWithModifiers,
+        mockRegistry
+      );
+      expect(result).toBe('&kp A');
+    });
+  });
 });

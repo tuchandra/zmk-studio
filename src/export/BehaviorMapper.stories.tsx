@@ -30,7 +30,7 @@ const BehaviorMappingDemo = ({ bindings }: { bindings: Binding[] }) => {
         <tbody>
           {bindings.map((binding, idx) => {
             const behavior = BehaviorMapper.getBehavior(binding.behaviorId);
-            const zmkCode = BehaviorMapper.formatBinding(binding, HidMapper.getZmkKeyName.bind(HidMapper));
+            const zmkCode = BehaviorMapper.formatBinding(binding, HidMapper.getZmkKeyNameWithModifiers.bind(HidMapper));
 
             return (
               <tr key={idx}>

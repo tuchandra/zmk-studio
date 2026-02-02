@@ -195,4 +195,214 @@ describe('HidMapper', () => {
       }
     });
   });
+
+  // ============================================================================
+  // Modifier Extraction and Formatting Tests
+  // ============================================================================
+  // Extended HID format: (modifiers << 24) | (page << 16) | id
+  // Where modifiers is a USB HID modifier byte:
+  //   bit 0 (0x01): Left Control
+  //   bit 1 (0x02): Left Shift
+  //   bit 2 (0x04): Left Alt
+  //   bit 3 (0x08): Left GUI
+  //   bit 4 (0x10): Right Control
+  //   bit 5 (0x20): Right Shift
+  //   bit 6 (0x40): Right Alt
+  //   bit 7 (0x80): Right GUI
+
+  // Helper to create extended HID usage with modifiers
+  const hidMod = (modifiers: number, page: number, id: number) =>
+    ((modifiers & 0xFF) << 24) | ((page & 0xFF) << 16) | (id & 0xFFFF);
+
+  describe('extractModifierFlags', () => {
+    it('should return 0 for standard HID usage without modifiers', () => {
+      expect(HidMapper.extractModifierFlags(hid(KB, 0x04))).toBe(0); // A
+      expect(HidMapper.extractModifierFlags(hid(KB, 0x2C))).toBe(0); // SPACE
+    });
+
+    it('should extract Left Control modifier (0x01)', () => {
+      const usage = hidMod(0x01, KB, 0x04); // LC + A
+      expect(HidMapper.extractModifierFlags(usage)).toBe(0x01);
+    });
+
+    it('should extract Left Shift modifier (0x02)', () => {
+      const usage = hidMod(0x02, KB, 0x04); // LS + A
+      expect(HidMapper.extractModifierFlags(usage)).toBe(0x02);
+    });
+
+    it('should extract Left Alt modifier (0x04)', () => {
+      const usage = hidMod(0x04, KB, 0x04); // LA + A
+      expect(HidMapper.extractModifierFlags(usage)).toBe(0x04);
+    });
+
+    it('should extract Left GUI modifier (0x08)', () => {
+      const usage = hidMod(0x08, KB, 0x04); // LG + A
+      expect(HidMapper.extractModifierFlags(usage)).toBe(0x08);
+    });
+
+    it('should extract combined modifiers', () => {
+      const usage = hidMod(0x05, KB, 0x04); // LC + LA + A
+      expect(HidMapper.extractModifierFlags(usage)).toBe(0x05);
+    });
+
+    it('should extract all modifiers (Hyper)', () => {
+      const usage = hidMod(0x0F, KB, 0x09); // LC+LS+LA+LG + F
+      expect(HidMapper.extractModifierFlags(usage)).toBe(0x0F);
+    });
+  });
+
+  describe('extractBaseUsage', () => {
+    it('should return original usage for standard HID without modifiers', () => {
+      const standard = hid(KB, 0x04); // A
+      expect(HidMapper.extractBaseUsage(standard)).toBe(standard);
+    });
+
+    it('should strip modifier byte and return base usage', () => {
+      const withMod = hidMod(0x08, KB, 0x1D); // LG + Z = 0x0807001D
+      const expected = hid(KB, 0x1D); // Just keyboard Z = 0x0007001D
+      expect(HidMapper.extractBaseUsage(withMod)).toBe(expected);
+    });
+
+    it('should handle real-world example: 0x0807001D -> 0x0007001D', () => {
+      expect(HidMapper.extractBaseUsage(0x0807001D)).toBe(0x0007001D);
+    });
+
+    it('should handle modifier + F13: 0x04070068 -> 0x00070068', () => {
+      expect(HidMapper.extractBaseUsage(0x04070068)).toBe(0x00070068);
+    });
+  });
+
+  describe('hasModifiers', () => {
+    it('should return false for standard HID usage', () => {
+      expect(HidMapper.hasModifiers(hid(KB, 0x04))).toBe(false);
+      expect(HidMapper.hasModifiers(hid(KB, 0x2C))).toBe(false);
+    });
+
+    it('should return true when any modifier is present', () => {
+      expect(HidMapper.hasModifiers(hidMod(0x01, KB, 0x04))).toBe(true); // LC
+      expect(HidMapper.hasModifiers(hidMod(0x02, KB, 0x04))).toBe(true); // LS
+      expect(HidMapper.hasModifiers(hidMod(0x04, KB, 0x04))).toBe(true); // LA
+      expect(HidMapper.hasModifiers(hidMod(0x08, KB, 0x04))).toBe(true); // LG
+    });
+
+    it('should return true for combined modifiers', () => {
+      expect(HidMapper.hasModifiers(hidMod(0x0F, KB, 0x04))).toBe(true); // Hyper
+    });
+  });
+
+  describe('formatModifierPrefix', () => {
+    it('should return empty string for no modifiers', () => {
+      expect(HidMapper.formatModifierPrefix(0x00)).toBe('');
+    });
+
+    it('should format Left Control as LC(', () => {
+      expect(HidMapper.formatModifierPrefix(0x01)).toBe('LC(');
+    });
+
+    it('should format Left Shift as LS(', () => {
+      expect(HidMapper.formatModifierPrefix(0x02)).toBe('LS(');
+    });
+
+    it('should format Left Alt as LA(', () => {
+      expect(HidMapper.formatModifierPrefix(0x04)).toBe('LA(');
+    });
+
+    it('should format Left GUI as LG(', () => {
+      expect(HidMapper.formatModifierPrefix(0x08)).toBe('LG(');
+    });
+
+    it('should format Right Control as RC(', () => {
+      expect(HidMapper.formatModifierPrefix(0x10)).toBe('RC(');
+    });
+
+    it('should format Right Shift as RS(', () => {
+      expect(HidMapper.formatModifierPrefix(0x20)).toBe('RS(');
+    });
+
+    it('should format Right Alt as RA(', () => {
+      expect(HidMapper.formatModifierPrefix(0x40)).toBe('RA(');
+    });
+
+    it('should format Right GUI as RG(', () => {
+      expect(HidMapper.formatModifierPrefix(0x80)).toBe('RG(');
+    });
+
+    it('should combine LC + LA as LC(LA(', () => {
+      expect(HidMapper.formatModifierPrefix(0x05)).toBe('LC(LA(');
+    });
+
+    it('should combine all left modifiers (Hyper) as LC(LS(LA(LG(', () => {
+      expect(HidMapper.formatModifierPrefix(0x0F)).toBe('LC(LS(LA(LG(');
+    });
+
+    it('should combine mixed left and right modifiers', () => {
+      // LC + RA = 0x01 + 0x40 = 0x41
+      expect(HidMapper.formatModifierPrefix(0x41)).toBe('LC(RA(');
+    });
+  });
+
+  describe('formatModifierSuffix', () => {
+    it('should return empty string for no modifiers', () => {
+      expect(HidMapper.formatModifierSuffix(0x00)).toBe('');
+    });
+
+    it('should return single ) for one modifier', () => {
+      expect(HidMapper.formatModifierSuffix(0x01)).toBe(')');
+      expect(HidMapper.formatModifierSuffix(0x02)).toBe(')');
+      expect(HidMapper.formatModifierSuffix(0x04)).toBe(')');
+    });
+
+    it('should return )) for two modifiers', () => {
+      expect(HidMapper.formatModifierSuffix(0x05)).toBe('))'); // LC + LA
+    });
+
+    it('should return )))) for four modifiers (Hyper)', () => {
+      // 0x0F = LC+LS+LA+LG = 4 modifiers = 4 closing parens
+      expect(HidMapper.formatModifierSuffix(0x0F)).toBe('))))');
+    });
+  });
+
+  describe('getZmkKeyNameWithModifiers', () => {
+    it('should return plain key name for standard HID usage', () => {
+      expect(HidMapper.getZmkKeyNameWithModifiers(hid(KB, 0x04))).toBe('A');
+      expect(HidMapper.getZmkKeyNameWithModifiers(hid(KB, 0x2C))).toBe('SPACE');
+    });
+
+    it('should wrap key with single modifier', () => {
+      // LA + F13 (0x68)
+      const usage = hidMod(0x04, KB, 0x68);
+      expect(HidMapper.getZmkKeyNameWithModifiers(usage)).toBe('LA(F13)');
+    });
+
+    it('should wrap key with Left GUI modifier', () => {
+      // LG + Z (0x1D)
+      const usage = hidMod(0x08, KB, 0x1D);
+      expect(HidMapper.getZmkKeyNameWithModifiers(usage)).toBe('LG(Z)');
+    });
+
+    it('should wrap key with multiple modifiers', () => {
+      // LC + LA + A
+      const usage = hidMod(0x05, KB, 0x04);
+      expect(HidMapper.getZmkKeyNameWithModifiers(usage)).toBe('LC(LA(A))');
+    });
+
+    it('should handle Hyper + F (all left modifiers)', () => {
+      // LC+LS+LA+LG + F (0x09)
+      const usage = hidMod(0x0F, KB, 0x09);
+      expect(HidMapper.getZmkKeyNameWithModifiers(usage)).toBe('LC(LS(LA(LG(F))))');
+    });
+
+    it('should handle real-world example: 0x0807001D -> LG(Z)', () => {
+      expect(HidMapper.getZmkKeyNameWithModifiers(0x0807001D)).toBe('LG(Z)');
+    });
+
+    it('should handle real-world example: 0x04070068 -> LA(F13)', () => {
+      expect(HidMapper.getZmkKeyNameWithModifiers(0x04070068)).toBe('LA(F13)');
+    });
+
+    it('should return null for unknown base key', () => {
+      const usage = hidMod(0x04, 0x99, 0x01); // Invalid page
+      expect(HidMapper.getZmkKeyNameWithModifiers(usage)).toBeNull();
+    });
+  });
 });

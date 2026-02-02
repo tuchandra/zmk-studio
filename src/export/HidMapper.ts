@@ -210,4 +210,137 @@ export class HidMapper {
     }
     return 'special';
   }
+
+  // ============================================================================
+  // Modifier Extraction and Formatting
+  // ============================================================================
+  // Extended HID format: (modifiers << 24) | (page << 16) | id
+  // Standard HID format: (page << 16) | id (modifiers byte is 0)
+  //
+  // USB HID modifier byte bits:
+  //   bit 0 (0x01): Left Control
+  //   bit 1 (0x02): Left Shift
+  //   bit 2 (0x04): Left Alt
+  //   bit 3 (0x08): Left GUI
+  //   bit 4 (0x10): Right Control
+  //   bit 5 (0x20): Right Shift
+  //   bit 6 (0x40): Right Alt
+  //   bit 7 (0x80): Right GUI
+
+  /**
+   * Extract modifier flags from extended HID usage
+   *
+   * @param hidUsage - HID usage code (possibly with modifier byte in bits 24-31)
+   * @returns Modifier byte (0x00-0xFF)
+   */
+  static extractModifierFlags(hidUsage: number): number {
+    return (hidUsage >>> 24) & 0xFF;
+  }
+
+  /**
+   * Extract the base HID usage (page + id) without modifiers
+   *
+   * Converts extended format back to standard format by stripping
+   * the modifier byte and ensuring page is only 8 bits.
+   *
+   * @param hidUsage - Extended HID usage code
+   * @returns Standard HID usage (page << 16 | id)
+   */
+  static extractBaseUsage(hidUsage: number): number {
+    const page = (hidUsage >>> 16) & 0xFF;  // Only lower 8 bits of page
+    const id = hidUsage & 0xFFFF;
+    return (page << 16) | id;
+  }
+
+  /**
+   * Check if the HID usage has modifiers
+   *
+   * @param hidUsage - HID usage code
+   * @returns True if modifier byte is non-zero
+   */
+  static hasModifiers(hidUsage: number): boolean {
+    return this.extractModifierFlags(hidUsage) !== 0;
+  }
+
+  /**
+   * Format modifier flags as ZMK modifier wrapper prefix
+   *
+   * @param modifiers - USB HID modifier byte
+   * @returns ZMK modifier prefix (e.g., "LC(LA(" for Ctrl+Alt)
+   */
+  static formatModifierPrefix(modifiers: number): string {
+    if (modifiers === 0) return '';
+
+    const parts: string[] = [];
+
+    // Order: Left modifiers first (Ctrl, Shift, Alt, GUI), then right
+    // Inner modifiers are applied first in ZMK, so we build outside-in
+    if (modifiers & 0x01) parts.push('LC(');  // Left Control
+    if (modifiers & 0x02) parts.push('LS(');  // Left Shift
+    if (modifiers & 0x04) parts.push('LA(');  // Left Alt
+    if (modifiers & 0x08) parts.push('LG(');  // Left GUI
+    if (modifiers & 0x10) parts.push('RC(');  // Right Control
+    if (modifiers & 0x20) parts.push('RS(');  // Right Shift
+    if (modifiers & 0x40) parts.push('RA(');  // Right Alt
+    if (modifiers & 0x80) parts.push('RG(');  // Right GUI
+
+    return parts.join('');
+  }
+
+  /**
+   * Format modifier flags as ZMK modifier wrapper suffix (closing parens)
+   *
+   * @param modifiers - USB HID modifier byte
+   * @returns Closing parentheses for each modifier
+   */
+  static formatModifierSuffix(modifiers: number): string {
+    if (modifiers === 0) return '';
+
+    // Count number of set bits
+    let count = 0;
+    let m = modifiers;
+    while (m) {
+      count += m & 1;
+      m >>>= 1;
+    }
+
+    return ')'.repeat(count);
+  }
+
+  /**
+   * Get ZMK key name with modifier wrappers
+   *
+   * Handles extended HID format that includes modifier flags.
+   * For standard HID format (no modifiers), returns plain key name.
+   *
+   * Examples:
+   * - 0x00070004 (A) → "A"
+   * - 0x04070068 (LA + F13) → "LA(F13)"
+   * - 0x0807001D (LG + Z) → "LG(Z)"
+   * - 0x0F070009 (LC+LS+LA+LG + F) → "LC(LS(LA(LG(F))))"
+   *
+   * @param hidUsage - HID usage code (standard or extended format)
+   * @returns ZMK key expression or null if base key unknown
+   */
+  static getZmkKeyNameWithModifiers(hidUsage: number): string | null {
+    const modifiers = this.extractModifierFlags(hidUsage);
+    const baseUsage = this.extractBaseUsage(hidUsage);
+
+    // Get the base key name
+    const keyName = this.getZmkKeyName(baseUsage);
+    if (!keyName) {
+      return null;
+    }
+
+    // If no modifiers, return plain key name
+    if (modifiers === 0) {
+      return keyName;
+    }
+
+    // Wrap with modifier functions
+    const prefix = this.formatModifierPrefix(modifiers);
+    const suffix = this.formatModifierSuffix(modifiers);
+
+    return `${prefix}${keyName}${suffix}`;
+  }
 }

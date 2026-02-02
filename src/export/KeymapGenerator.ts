@@ -112,7 +112,7 @@ ${layerDefs}
     // Format bindings with proper indentation
     const bindingsPerRow = 6; // Adjust based on keyboard layout
     const bindingStrings = layer.bindings.map(binding =>
-      BehaviorMapper.formatBinding(binding, HidMapper.getZmkKeyName.bind(HidMapper))
+      BehaviorMapper.formatBinding(binding, HidMapper.getZmkKeyNameWithModifiers.bind(HidMapper))
     );
 
     // Group bindings into rows for readability
@@ -256,7 +256,7 @@ ${layerDefs}
     const bindingStrings = layer.bindings.map(binding =>
       BehaviorMapper.formatBindingWithRegistry(
         binding,
-        HidMapper.getZmkKeyName.bind(HidMapper),
+        HidMapper.getZmkKeyNameWithModifiers.bind(HidMapper),
         behaviorRegistry
       )
     );
