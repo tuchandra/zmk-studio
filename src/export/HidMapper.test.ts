@@ -501,4 +501,74 @@ describe('HidMapper', () => {
       });
     });
   });
+
+  // ============================================================================
+  // Real-world Symbol Layer HID Codes (from Toucan keyboard)
+  // ============================================================================
+  // These are shifted keys that produce symbols like |, :, <, {, etc.
+  // Format: 0xMMPPIIII where MM=modifier, PP=page, IIII=id
+  describe('Shifted symbol keys (real-world HID codes)', () => {
+    it('should convert 0x2070031 to LS(BSLH) for pipe |', () => {
+      // 0x02 = Left Shift, 0x07 = keyboard, 0x31 = backslash
+      expect(HidMapper.getZmkKeyNameWithModifiers(0x2070031)).toBe('LS(BSLH)');
+    });
+
+    it('should convert 0x2070033 to LS(SEMI) for colon :', () => {
+      // 0x02 = Left Shift, 0x07 = keyboard, 0x33 = semicolon
+      expect(HidMapper.getZmkKeyNameWithModifiers(0x2070033)).toBe('LS(SEMI)');
+    });
+
+    it('should convert 0x2070036 to LS(COMMA) for less-than <', () => {
+      // 0x02 = Left Shift, 0x07 = keyboard, 0x36 = comma
+      expect(HidMapper.getZmkKeyNameWithModifiers(0x2070036)).toBe('LS(COMMA)');
+    });
+
+    it('should convert 0x207002f to LS(LBKT) for left brace {', () => {
+      // 0x02 = Left Shift, 0x07 = keyboard, 0x2f = left bracket
+      expect(HidMapper.getZmkKeyNameWithModifiers(0x207002f)).toBe('LS(LBKT)');
+    });
+
+    it('should convert 0x2070026 to LS(N9) for left paren (', () => {
+      // 0x02 = Left Shift, 0x07 = keyboard, 0x26 = 9
+      expect(HidMapper.getZmkKeyNameWithModifiers(0x2070026)).toBe('LS(N9)');
+    });
+
+    it('should convert 0x207002d to LS(MINUS) for underscore _', () => {
+      // 0x02 = Left Shift, 0x07 = keyboard, 0x2d = minus
+      expect(HidMapper.getZmkKeyNameWithModifiers(0x207002d)).toBe('LS(MINUS)');
+    });
+
+    it('should convert 0x2070037 to LS(DOT) for greater-than >', () => {
+      // 0x02 = Left Shift, 0x07 = keyboard, 0x37 = period
+      expect(HidMapper.getZmkKeyNameWithModifiers(0x2070037)).toBe('LS(DOT)');
+    });
+
+    it('should convert 0x2070030 to LS(RBKT) for right brace }', () => {
+      // 0x02 = Left Shift, 0x07 = keyboard, 0x30 = right bracket
+      expect(HidMapper.getZmkKeyNameWithModifiers(0x2070030)).toBe('LS(RBKT)');
+    });
+
+    it('should convert 0x2070027 to LS(N0) for right paren )', () => {
+      // 0x02 = Left Shift, 0x07 = keyboard, 0x27 = 0
+      expect(HidMapper.getZmkKeyNameWithModifiers(0x2070027)).toBe('LS(N0)');
+    });
+
+    it('should convert 0x2070020 to LS(N3) for hash #', () => {
+      // 0x02 = Left Shift, 0x07 = keyboard, 0x20 = 3
+      expect(HidMapper.getZmkKeyNameWithModifiers(0x2070020)).toBe('LS(N3)');
+    });
+
+    // Debug: test the extraction functions directly
+    it('should extract modifier 0x02 from 0x2070031', () => {
+      expect(HidMapper.extractModifierFlags(0x2070031)).toBe(0x02);
+    });
+
+    it('should extract base usage 0x00070031 from 0x2070031', () => {
+      expect(HidMapper.extractBaseUsage(0x2070031)).toBe(0x00070031);
+    });
+
+    it('should get BSLH for base usage 0x00070031', () => {
+      expect(HidMapper.getZmkKeyName(0x00070031)).toBe('BSLH');
+    });
+  });
 });
