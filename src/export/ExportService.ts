@@ -2,10 +2,7 @@
  * ExportService: Orchestrates keymap export operations
  *
  * Handles RPC communication with connected keyboard, generates .keymap files,
- * and triggers browser download.
- *
- * TODO: Add copyToClipboard() method for tighter feedback loop during development.
- *       This would allow copying the keymap content without downloading a file.
+ * and triggers browser download. Also supports copy-to-clipboard for faster iteration.
  */
 
 import { Keymap, Layer, Binding, ExportResult, ExportErrorCode } from './types';
@@ -141,6 +138,148 @@ export class ExportService {
     // Cleanup
     document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Copy keymap content to clipboard (no file download)
+   *
+   * Useful for quick iteration and testing without file management.
+   *
+   * @param deviceName - Keyboard device name
+   * @param layers - Array of layer configurations from RPC
+   * @returns Export result with success status and content
+   */
+  static async copyToClipboard(
+    deviceName: string,
+    layers: Layer[]
+  ): Promise<ExportResult> {
+    try {
+      // Validate inputs
+      if (!deviceName || deviceName.trim() === '') {
+        return {
+          success: false,
+          filename: '',
+          error: {
+            code: ExportErrorCode.NO_KEYBOARD,
+            message: 'Device name is required for export',
+          },
+        };
+      }
+
+      if (!layers || layers.length === 0) {
+        return {
+          success: false,
+          filename: '',
+          error: {
+            code: ExportErrorCode.INVALID_LAYER,
+            message: 'No layers available to export',
+          },
+        };
+      }
+
+      // Build keymap object
+      const keymap: Keymap = {
+        layers,
+        deviceName,
+        layoutName: 'default',
+        timestamp: new Date(),
+        version: '1.0.0',
+        totalBindings: layers.reduce((sum, layer) => sum + layer.bindings.length, 0),
+      };
+
+      // Generate .keymap file content
+      const content = KeymapGenerator.generate(keymap);
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(content);
+
+      return {
+        success: true,
+        filename: this.generateFilename(deviceName),
+        content,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        filename: '',
+        error: {
+          code: ExportErrorCode.GENERATION_FAILED,
+          message: error instanceof Error ? error.message : 'Unknown error during export',
+          context: { error },
+        },
+      };
+    }
+  }
+
+  /**
+   * Copy keymap content to clipboard using behavior registry (no file download)
+   *
+   * @param deviceName - Keyboard device name
+   * @param layers - Array of layer configurations from RPC
+   * @param behaviorRegistry - Map of behavior ID to metadata from keyboard RPC
+   * @returns Export result with success status and content
+   */
+  static async copyToClipboardWithRegistry(
+    deviceName: string,
+    layers: Layer[],
+    behaviorRegistry: BehaviorRegistry
+  ): Promise<ExportResult> {
+    try {
+      // Validate inputs
+      if (!deviceName || deviceName.trim() === '') {
+        return {
+          success: false,
+          filename: '',
+          error: {
+            code: ExportErrorCode.NO_KEYBOARD,
+            message: 'Device name is required for export',
+          },
+        };
+      }
+
+      if (!layers || layers.length === 0) {
+        return {
+          success: false,
+          filename: '',
+          error: {
+            code: ExportErrorCode.INVALID_LAYER,
+            message: 'No layers available to export',
+          },
+        };
+      }
+
+      // Build keymap object
+      const keymap: Keymap = {
+        layers,
+        deviceName,
+        layoutName: 'default',
+        timestamp: new Date(),
+        version: '1.0.0',
+        totalBindings: layers.reduce((sum, layer) => sum + layer.bindings.length, 0),
+      };
+
+      // Generate .keymap file content using the behavior registry
+      const content = KeymapGenerator.generateWithRegistry(keymap, behaviorRegistry);
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(content);
+
+      return {
+        success: true,
+        filename: this.generateFilename(deviceName),
+        content,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        filename: '',
+        error: {
+          code: ExportErrorCode.GENERATION_FAILED,
+          message: error instanceof Error ? error.message : 'Unknown error during export',
+          context: { error },
+        },
+      };
+    }
   }
 
   /**

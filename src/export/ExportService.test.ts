@@ -16,22 +16,31 @@ const mockClick = vi.fn();
 const mockAppendChild = vi.fn();
 const mockRemoveChild = vi.fn();
 
+// Setup URL mocks
+if (typeof global.URL === 'undefined') {
+  (global as any).URL = {};
+}
 global.URL.createObjectURL = mockCreateObjectURL;
 global.URL.revokeObjectURL = mockRevokeObjectURL;
 
-global.document.createElement = vi.fn((tag: string) => {
-  if (tag === 'a') {
-    return {
-      href: '',
-      download: '',
-      click: mockClick,
-    } as any;
-  }
-  return {} as any;
-});
+// Setup document mocks (only if document exists)
+if (typeof global.document !== 'undefined') {
+  global.document.createElement = vi.fn((tag: string) => {
+    if (tag === 'a') {
+      return {
+        href: '',
+        download: '',
+        click: mockClick,
+      } as any;
+    }
+    return {} as any;
+  });
 
-global.document.body.appendChild = mockAppendChild;
-global.document.body.removeChild = mockRemoveChild;
+  if (global.document.body) {
+    global.document.body.appendChild = mockAppendChild;
+    global.document.body.removeChild = mockRemoveChild;
+  }
+}
 
 describe('ExportService', () => {
   beforeEach(() => {
@@ -348,6 +357,117 @@ describe('ExportService', () => {
       expect(result.success).toBe(true);
       expect(result.content).toContain('&kp A');
       expect(result.content).toContain('&trans');
+    });
+  });
+
+  // ============================================================================
+  // Copy to Clipboard Tests
+  // ============================================================================
+  describe('copyToClipboard', () => {
+    const mockWriteText = vi.fn(() => Promise.resolve());
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      // Mock clipboard API
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: mockWriteText,
+        },
+      });
+    });
+
+    it('should copy keymap content to clipboard', async () => {
+      const result = await ExportService.copyToClipboard('test-keyboard', sampleLayers);
+
+      expect(result.success).toBe(true);
+      expect(mockWriteText).toHaveBeenCalled();
+      expect(result.content).toContain('Exported from ZMK Studio');
+    });
+
+    it('should return content without triggering download', async () => {
+      vi.clearAllMocks();
+      const result = await ExportService.copyToClipboard('test-keyboard', sampleLayers);
+
+      expect(result.success).toBe(true);
+      // Should NOT trigger download
+      expect(mockCreateObjectURL).not.toHaveBeenCalled();
+      expect(mockClick).not.toHaveBeenCalled();
+    });
+
+    it('should return error when device name is empty', async () => {
+      const result = await ExportService.copyToClipboard('', sampleLayers);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(ExportErrorCode.NO_KEYBOARD);
+    });
+
+    it('should return error when layers is empty', async () => {
+      const result = await ExportService.copyToClipboard('test', []);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(ExportErrorCode.INVALID_LAYER);
+    });
+
+    it('should handle clipboard write failure', async () => {
+      mockWriteText.mockRejectedValueOnce(new Error('Clipboard access denied'));
+
+      const result = await ExportService.copyToClipboard('test', sampleLayers);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe(ExportErrorCode.GENERATION_FAILED);
+      expect(result.error?.message).toContain('Clipboard access denied');
+    });
+  });
+
+  describe('copyToClipboardWithRegistry', () => {
+    const mockWriteText = vi.fn(() => Promise.resolve());
+    const mockBehaviorRegistry = new Map([
+      [8, { id: 8, displayName: 'Key Press', metadata: [] }],
+      [99, { id: 99, displayName: 'Transparent', metadata: [] }],
+    ]);
+
+    const layersWithNonStandardIds: Layer[] = [
+      {
+        id: 0,
+        label: 'BASE',
+        bindings: [
+          { behaviorId: 8, param1: (0x07 << 16) + 0x04, param2: null, position: 0 },
+          { behaviorId: 99, param1: 0, param2: null, position: 1 },
+        ],
+      },
+    ];
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: mockWriteText,
+        },
+      });
+    });
+
+    it('should copy keymap with registry to clipboard', async () => {
+      const result = await ExportService.copyToClipboardWithRegistry(
+        'Toucan',
+        layersWithNonStandardIds,
+        mockBehaviorRegistry
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockWriteText).toHaveBeenCalled();
+      expect(result.content).toContain('&kp A');
+      expect(result.content).toContain('&trans');
+    });
+
+    it('should not trigger file download', async () => {
+      vi.clearAllMocks();
+      await ExportService.copyToClipboardWithRegistry(
+        'Toucan',
+        layersWithNonStandardIds,
+        mockBehaviorRegistry
+      );
+
+      expect(mockCreateObjectURL).not.toHaveBeenCalled();
     });
   });
 });

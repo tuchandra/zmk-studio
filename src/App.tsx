@@ -353,6 +353,66 @@ function App() {
     doExport();
   }, [connectedDeviceName]);
 
+  const copyKeymapToClipboard = useCallback(() => {
+    async function doCopy() {
+      const keymap = keymapRef.current;
+      const behaviors = behaviorsRef.current;
+
+      if (!connectedDeviceName || !keymap) {
+        console.warn("Cannot copy: no device connected or keymap not loaded");
+        return;
+      }
+
+      try {
+        // Transform keymap data to Layer[] format for ExportService
+        const layers: Layer[] = keymap.layers.map((layer, index) => ({
+          id: index,
+          label: layer.name || `Layer ${index}`,
+          bindings: layer.bindings.map((binding, position) => ({
+            behaviorId: binding.behaviorId || 0,
+            param1: binding.param1 || 0,
+            param2: binding.param2,
+            position,
+          })),
+        }));
+
+        // Convert behaviors object to BehaviorRegistry Map
+        const behaviorRegistry: BehaviorRegistry = new Map(
+          Object.entries(behaviors).map(([id, behavior]) => [
+            parseInt(id, 10),
+            { id: behavior.id, displayName: behavior.displayName, metadata: behavior.metadata }
+          ])
+        );
+
+        // Copy to clipboard using the behavior registry
+        const result = await ExportService.copyToClipboardWithRegistry(connectedDeviceName, layers, behaviorRegistry);
+
+        if (result.success) {
+          console.log(`Keymap copied to clipboard (${result.content?.length} chars)`);
+        } else {
+          console.error(`Copy failed: ${result.error?.message}`);
+        }
+      } catch (error) {
+        console.error("Copy error:", error);
+      }
+    }
+
+    doCopy();
+  }, [connectedDeviceName]);
+
+  // Keyboard shortcut: Cmd/Ctrl+Shift+C to copy keymap to clipboard
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'c') {
+        e.preventDefault();
+        copyKeymapToClipboard();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [copyKeymapToClipboard]);
+
   const importKeymap = useCallback(async (file: File) => {
     if (!conn.conn || !connectedDeviceName) {
       console.warn("Cannot import: no device connected");
