@@ -59,7 +59,7 @@ export interface KeyCode {
   hidUsage: number;
   zmkName: string;
   label: string;
-  category: 'letter' | 'number' | 'modifier' | 'function' | 'special';
+  category: 'letter' | 'number' | 'modifier' | 'function' | 'special' | 'media';
 }
 
 // ============================================================================

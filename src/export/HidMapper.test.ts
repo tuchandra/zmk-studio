@@ -405,4 +405,100 @@ describe('HidMapper', () => {
       expect(HidMapper.getZmkKeyNameWithModifiers(usage)).toBeNull();
     });
   });
+
+  // ============================================================================
+  // Consumer Page Key Support (Media Keys)
+  // ============================================================================
+  // USB HID Consumer Page (0x0C) contains media keys like volume, playback, etc.
+  // ZMK uses C_ prefixed names for consumer keys (e.g., C_VOL_UP, C_MUTE)
+
+  const CONSUMER = 0x0C;
+
+  describe('Consumer Page Keys (Media Keys)', () => {
+    describe('getZmkKeyName with consumer keys', () => {
+      it('should convert Volume Increment to C_VOL_UP', () => {
+        // Consumer page 0x0C, ID 233 (0xE9)
+        expect(HidMapper.getZmkKeyName(hid(CONSUMER, 233))).toBe('C_VOL_UP');
+      });
+
+      it('should convert Volume Decrement to C_VOL_DN', () => {
+        // Consumer page 0x0C, ID 234 (0xEA)
+        expect(HidMapper.getZmkKeyName(hid(CONSUMER, 234))).toBe('C_VOL_DN');
+      });
+
+      it('should convert Mute to C_MUTE', () => {
+        // Consumer page 0x0C, ID 226 (0xE2)
+        expect(HidMapper.getZmkKeyName(hid(CONSUMER, 226))).toBe('C_MUTE');
+      });
+
+      it('should convert Play/Pause to C_PP', () => {
+        // Consumer page 0x0C, ID 205 (0xCD)
+        expect(HidMapper.getZmkKeyName(hid(CONSUMER, 205))).toBe('C_PP');
+      });
+
+      it('should convert Display Brightness Increment to C_BRI_UP', () => {
+        // Consumer page 0x0C, ID 111 (0x6F)
+        expect(HidMapper.getZmkKeyName(hid(CONSUMER, 111))).toBe('C_BRI_UP');
+      });
+
+      it('should convert Display Brightness Decrement to C_BRI_DN', () => {
+        // Consumer page 0x0C, ID 112 (0x70)
+        expect(HidMapper.getZmkKeyName(hid(CONSUMER, 112))).toBe('C_BRI_DN');
+      });
+
+      it('should convert Next Track to C_NEXT', () => {
+        // Consumer page 0x0C, ID 181 (0xB5)
+        expect(HidMapper.getZmkKeyName(hid(CONSUMER, 181))).toBe('C_NEXT');
+      });
+
+      it('should convert Previous Track to C_PREV', () => {
+        // Consumer page 0x0C, ID 182 (0xB6)
+        expect(HidMapper.getZmkKeyName(hid(CONSUMER, 182))).toBe('C_PREV');
+      });
+
+      it('should convert Stop to C_STOP', () => {
+        // Consumer page 0x0C, ID 183 (0xB7)
+        expect(HidMapper.getZmkKeyName(hid(CONSUMER, 183))).toBe('C_STOP');
+      });
+
+      it('should convert Eject to C_EJECT', () => {
+        // Consumer page 0x0C, ID 184 (0xB8)
+        expect(HidMapper.getZmkKeyName(hid(CONSUMER, 184))).toBe('C_EJECT');
+      });
+    });
+
+    describe('getZmkKeyNameWithModifiers with consumer keys', () => {
+      it('should format consumer key without modifiers', () => {
+        expect(HidMapper.getZmkKeyNameWithModifiers(hid(CONSUMER, 233))).toBe('C_VOL_UP');
+      });
+
+      it('should format consumer key with modifier', () => {
+        // LS + Volume Up
+        const usage = hidMod(0x02, CONSUMER, 233);
+        expect(HidMapper.getZmkKeyNameWithModifiers(usage)).toBe('LS(C_VOL_UP)');
+      });
+
+      it('should format consumer key with multiple modifiers', () => {
+        // LC + LA + Mute
+        const usage = hidMod(0x05, CONSUMER, 226);
+        expect(HidMapper.getZmkKeyNameWithModifiers(usage)).toBe('LC(LA(C_MUTE))');
+      });
+    });
+
+    describe('getKeyCode with consumer keys', () => {
+      it('should return KeyCode object for volume up', () => {
+        const keyCode = HidMapper.getKeyCode(hid(CONSUMER, 233));
+        expect(keyCode).not.toBeNull();
+        expect(keyCode?.zmkName).toBe('C_VOL_UP');
+        expect(keyCode?.category).toBe('media');
+      });
+
+      it('should return KeyCode object for play/pause', () => {
+        const keyCode = HidMapper.getKeyCode(hid(CONSUMER, 205));
+        expect(keyCode).not.toBeNull();
+        expect(keyCode?.zmkName).toBe('C_PP');
+        expect(keyCode?.category).toBe('media');
+      });
+    });
+  });
 });

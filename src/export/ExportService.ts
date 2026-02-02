@@ -3,6 +3,9 @@
  *
  * Handles RPC communication with connected keyboard, generates .keymap files,
  * and triggers browser download.
+ *
+ * TODO: Add copyToClipboard() method for tighter feedback loop during development.
+ *       This would allow copying the keymap content without downloading a file.
  */
 
 import { Keymap, Layer, Binding, ExportResult, ExportErrorCode } from './types';

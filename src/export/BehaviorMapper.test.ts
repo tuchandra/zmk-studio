@@ -512,4 +512,34 @@ describe('BehaviorMapper', () => {
       expect(result).toBe('&kp A');
     });
   });
+
+  // ============================================================================
+  // Studio Unlock Behavior Tests
+  // ============================================================================
+  // Studio Unlock is a ZMK Studio-specific behavior that unlocks the keyboard
+  // for configuration. It's not a real keymap action, so it should export as
+  // a special placeholder that preserves position without creating invalid syntax.
+  describe('Studio Unlock behavior', () => {
+    const registryWithStudioUnlock = new Map([
+      [8, { id: 8, displayName: 'Key Press', metadata: [] }],
+      [23, { id: 23, displayName: 'Studio Unlock', metadata: [] }],
+    ]);
+
+    it('should export Studio Unlock as &studio_unlock', () => {
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 23, param1: 0, param2: null, position: 0 },
+        mockGetKeyName,
+        registryWithStudioUnlock
+      );
+      expect(result).toBe('&studio_unlock');
+    });
+
+    it('should map "Studio Unlock" display name to studio_unlock code', () => {
+      expect(BehaviorMapper.getBehaviorCodeFromDisplayName('Studio Unlock')).toBe('studio_unlock');
+    });
+
+    it('should return paramCount 0 for Studio Unlock', () => {
+      expect(BehaviorMapper.getParamCountFromDisplayName('Studio Unlock')).toBe(0);
+    });
+  });
 });

@@ -18,6 +18,30 @@ const HID_PAGE_KEYBOARD = 0x07;
 const HID_PAGE_CONSUMER = 0x0C;
 
 /**
+ * Consumer page key mappings (HID 0x0C) to ZMK C_ prefixed names
+ *
+ * These map consumer page usage IDs to ZMK key names.
+ * ZMK uses C_ prefix for all consumer page keys.
+ */
+const CONSUMER_KEY_MAP: Record<number, string> = {
+  // Media playback controls
+  181: 'C_NEXT',         // Scan Next Track
+  182: 'C_PREV',         // Scan Previous Track
+  183: 'C_STOP',         // Stop
+  184: 'C_EJECT',        // Eject
+  205: 'C_PP',           // Play/Pause
+
+  // Volume controls
+  226: 'C_MUTE',         // Mute
+  233: 'C_VOL_UP',       // Volume Increment
+  234: 'C_VOL_DN',       // Volume Decrement
+
+  // Brightness controls
+  111: 'C_BRI_UP',       // Display Brightness Increment
+  112: 'C_BRI_DN',       // Display Brightness Decrement
+};
+
+/**
  * Common key name transformations for ZMK compatibility
  *
  * ZMK uses specific naming conventions that differ from HID usage names.
@@ -111,6 +135,11 @@ export class HidMapper {
       return null;
     }
 
+    // Consumer page keys - use explicit mapping
+    if (page === HID_PAGE_CONSUMER) {
+      return CONSUMER_KEY_MAP[id] || null;
+    }
+
     // Special handling for modifiers (0xE0-0xE7) since left and right have same labels
     if (page === HID_PAGE_KEYBOARD && id >= 0xE0 && id <= 0xE7) {
       const modifierMap: Record<number, string> = {
@@ -198,7 +227,7 @@ export class HidMapper {
    * @param zmkName - ZMK key name
    * @returns Key category
    */
-  private static categorizeKey(zmkName: string): 'letter' | 'number' | 'modifier' | 'function' | 'special' {
+  private static categorizeKey(zmkName: string): 'letter' | 'number' | 'modifier' | 'function' | 'special' | 'media' {
     if (/^[A-Z]$/.test(zmkName)) {
       return 'letter';
     }
@@ -207,6 +236,9 @@ export class HidMapper {
     }
     if (['LCTRL', 'LSHFT', 'LALT', 'LGUI', 'RCTRL', 'RSHFT', 'RALT', 'RGUI'].includes(zmkName)) {
       return 'modifier';
+    }
+    if (zmkName.startsWith('C_')) {
+      return 'media';
     }
     return 'special';
   }

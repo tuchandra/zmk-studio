@@ -29,6 +29,7 @@ const DISPLAY_NAME_TO_CODE: Record<string, { code: string; paramCount: number }>
   'transparent': { code: 'trans', paramCount: 0 },
   'none': { code: 'none', paramCount: 0 },
   'bluetooth': { code: 'bt', paramCount: 1 },
+  'studio unlock': { code: 'studio_unlock', paramCount: 0 },
 };
 
 /**
@@ -278,6 +279,9 @@ export class BehaviorMapper {
     }
     if (code === 'none') {
       return '&none';
+    }
+    if (code === 'studio_unlock') {
+      return '&studio_unlock';
     }
 
     // Single parameter behaviors
