@@ -452,6 +452,9 @@ function App() {
         }
       }
 
+      // Trigger UI refresh by updating connection state (causes useConnectedDeviceData to re-fetch)
+      setConn({ conn: conn.conn });
+
       console.log(`Import successful: ${result.layers.length} layers imported`);
       // TODO: Show success toast notification
     } catch (error) {
