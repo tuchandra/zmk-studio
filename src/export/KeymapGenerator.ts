@@ -6,8 +6,13 @@
  */
 
 import { Keymap, ExportedKeymap, ExportMetadata, Layer } from './types';
-import { BehaviorMapper } from './BehaviorMapper';
+import { BehaviorMapper, BehaviorRegistryEntry } from './BehaviorMapper';
 import { HidMapper } from './HidMapper';
+
+/**
+ * Type alias for behavior registry from keyboard RPC
+ */
+export type BehaviorRegistry = Map<number, BehaviorRegistryEntry>;
 
 export class KeymapGenerator {
   /**
@@ -187,5 +192,92 @@ ${bindingsFormatted}
       .replace(/^_|_$/g, '');
 
     return `${baseName}_layer`;
+  }
+
+  /**
+   * Generate complete .keymap file content using a dynamic behavior registry
+   *
+   * This method uses the keyboard's actual behavior registry instead of
+   * hardcoded behavior IDs, which allows proper export for keyboards
+   * with non-standard behavior ID assignments.
+   *
+   * @param keymap - Complete keymap configuration
+   * @param behaviorRegistry - Map of behavior ID to metadata from keyboard RPC
+   * @returns DeviceTree-formatted .keymap file content
+   */
+  static generateWithRegistry(keymap: Keymap, behaviorRegistry: BehaviorRegistry): string {
+    const parts = [
+      this.generateMetadata({
+        timestamp: keymap.timestamp.toISOString(),
+        deviceName: keymap.deviceName,
+        version: keymap.version,
+        layerCount: keymap.layers.length,
+      }),
+      this.generateIncludes(),
+      this.generateLayerConstants(keymap.layers),
+      this.generateKeymapWithRegistry(keymap.layers, behaviorRegistry),
+      this.generateFooter(),
+    ];
+
+    return parts.join('\n\n');
+  }
+
+  /**
+   * Generate keymap DeviceTree structure using behavior registry
+   *
+   * @param layers - Array of layers
+   * @param behaviorRegistry - Map of behavior ID to metadata from keyboard RPC
+   * @returns Complete keymap block with all layers
+   */
+  private static generateKeymapWithRegistry(layers: Layer[], behaviorRegistry: BehaviorRegistry): string {
+    const layerDefs = layers
+      .map(layer => this.generateLayerWithRegistry(layer, behaviorRegistry))
+      .join('\n\n');
+
+    return `/ {
+  keymap {
+    compatible = "zmk,keymap";
+
+${layerDefs}
+  };
+};`;
+  }
+
+  /**
+   * Generate a single layer definition using behavior registry
+   *
+   * @param layer - Layer configuration
+   * @param behaviorRegistry - Map of behavior ID to metadata from keyboard RPC
+   * @returns DeviceTree layer block
+   */
+  static generateLayerWithRegistry(layer: Layer, behaviorRegistry: BehaviorRegistry): string {
+    // Format bindings with proper indentation
+    const bindingsPerRow = 6; // Adjust based on keyboard layout
+    const bindingStrings = layer.bindings.map(binding =>
+      BehaviorMapper.formatBindingWithRegistry(
+        binding,
+        HidMapper.getZmkKeyName.bind(HidMapper),
+        behaviorRegistry
+      )
+    );
+
+    // Group bindings into rows for readability
+    const rows: string[] = [];
+    for (let i = 0; i < bindingStrings.length; i += bindingsPerRow) {
+      rows.push(bindingStrings.slice(i, i + bindingsPerRow).join(' '));
+    }
+
+    const bindingsFormatted = rows
+      .map(row => `        ${row}`)
+      .join('\n');
+
+    const layerName = this.toLayerName(layer.label);
+
+    return `    ${layerName} {
+      label = "${layer.label}";
+      bindings = <
+${bindingsFormatted}
+      >;
+    };`;
   }
 }

@@ -5,7 +5,12 @@ import { call_rpc } from "./rpc/logging";
 import { ExportService } from "./export/ExportService";
 import { ImportService } from "./import/ImportService";
 import { Layer } from "./export/types";
+import { BehaviorRegistry } from "./export/KeymapGenerator";
 import { Keymap } from "@zmkfirmware/zmk-studio-ts-client/keymap";
+import type { GetBehaviorDetailsResponse } from "@zmkfirmware/zmk-studio-ts-client/behaviors";
+
+// Type for the behaviors map from Keyboard component
+type BehaviorMap = Record<number, GetBehaviorDetailsResponse>;
 
 import type { Notification } from "@zmkfirmware/zmk-studio-ts-client/studio";
 import { ConnectionState, ConnectionContext } from "./rpc/ConnectionContext";
@@ -186,6 +191,12 @@ function App() {
     keymapRef.current = km;
   }, []);
 
+  // Store behaviors ref from Keyboard component for export
+  const behaviorsRef = React.useRef<BehaviorMap>({});
+  const setBehaviorsForExport = React.useCallback((behaviors: BehaviorMap) => {
+    behaviorsRef.current = behaviors;
+  }, []);
+
   useSub("rpc_notification.core.lockStateChanged", (ls) => {
     setLockState(ls);
   });
@@ -286,7 +297,8 @@ function App() {
   const exportKeymap = useCallback(() => {
     async function doExport() {
       const keymap = keymapRef.current;
-      console.log("[Export] Button clicked", { connectedDeviceName, hasKeymap: !!keymap });
+      const behaviors = behaviorsRef.current;
+      console.log("[Export] Button clicked", { connectedDeviceName, hasKeymap: !!keymap, hasBehaviors: Object.keys(behaviors).length > 0 });
 
       if (!connectedDeviceName || !keymap) {
         console.warn("Cannot export: no device connected or keymap not loaded", {
@@ -297,7 +309,7 @@ function App() {
         return;
       }
 
-      console.log("[Export] Starting export...", { layerCount: keymap.layers.length });
+      console.log("[Export] Starting export...", { layerCount: keymap.layers.length, behaviorCount: Object.keys(behaviors).length });
       setIsExporting(true);
       try {
         // Transform keymap data to Layer[] format for ExportService
@@ -312,8 +324,16 @@ function App() {
           })),
         }));
 
-        // Export to file
-        const result = await ExportService.exportKeymap(connectedDeviceName, layers);
+        // Convert behaviors object to BehaviorRegistry Map
+        const behaviorRegistry: BehaviorRegistry = new Map(
+          Object.entries(behaviors).map(([id, behavior]) => [
+            parseInt(id, 10),
+            { id: behavior.id, displayName: behavior.displayName, metadata: behavior.metadata }
+          ])
+        );
+
+        // Export to file using the behavior registry
+        const result = await ExportService.exportKeymapWithRegistry(connectedDeviceName, layers, behaviorRegistry);
 
         if (result.success) {
           console.log(`Export successful: ${result.filename}`);
@@ -422,7 +442,7 @@ function App() {
               onImport={importKeymap}
               isImporting={isImporting}
             />
-            <Keyboard onKeymapChange={setKeymapForExport} />
+            <Keyboard onKeymapChange={setKeymapForExport} onBehaviorsChange={setBehaviorsForExport} />
             <AppFooter
               onShowAbout={() => setShowAbout(true)}
               onShowLicenseNotice={() => setShowLicenseNotice(true)}

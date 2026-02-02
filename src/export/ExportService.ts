@@ -6,7 +6,7 @@
  */
 
 import { Keymap, Layer, Binding, ExportResult, ExportErrorCode } from './types';
-import { KeymapGenerator } from './KeymapGenerator';
+import { KeymapGenerator, BehaviorRegistry } from './KeymapGenerator';
 
 export class ExportService {
   /**
@@ -138,5 +138,83 @@ export class ExportService {
     // Cleanup
     document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Export current keymap to .keymap file using a dynamic behavior registry
+   *
+   * This method uses the keyboard's actual behavior registry instead of
+   * hardcoded behavior IDs, which allows proper export for keyboards
+   * with non-standard behavior ID assignments (like the Toucan).
+   *
+   * @param deviceName - Keyboard device name for filename
+   * @param layers - Array of layer configurations from RPC
+   * @param behaviorRegistry - Map of behavior ID to metadata from keyboard RPC
+   * @returns Export result with success status and filename
+   */
+  static async exportKeymapWithRegistry(
+    deviceName: string,
+    layers: Layer[],
+    behaviorRegistry: BehaviorRegistry
+  ): Promise<ExportResult> {
+    try {
+      // Validate inputs
+      if (!deviceName || deviceName.trim() === '') {
+        return {
+          success: false,
+          filename: '',
+          error: {
+            code: ExportErrorCode.NO_KEYBOARD,
+            message: 'Device name is required for export',
+          },
+        };
+      }
+
+      if (!layers || layers.length === 0) {
+        return {
+          success: false,
+          filename: '',
+          error: {
+            code: ExportErrorCode.INVALID_LAYER,
+            message: 'No layers available to export',
+          },
+        };
+      }
+
+      // Build keymap object
+      const keymap: Keymap = {
+        layers,
+        deviceName,
+        layoutName: 'default',
+        timestamp: new Date(),
+        version: '1.0.0',
+        totalBindings: layers.reduce((sum, layer) => sum + layer.bindings.length, 0),
+      };
+
+      // Generate .keymap file content using the behavior registry
+      const content = KeymapGenerator.generateWithRegistry(keymap, behaviorRegistry);
+
+      // Generate filename
+      const filename = this.generateFilename(deviceName);
+
+      // Download file
+      this.downloadFile(content, filename);
+
+      return {
+        success: true,
+        filename,
+        content,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        filename: '',
+        error: {
+          code: ExportErrorCode.GENERATION_FAILED,
+          message: error instanceof Error ? error.message : 'Unknown error during export',
+          context: { error },
+        },
+      };
+    }
   }
 }

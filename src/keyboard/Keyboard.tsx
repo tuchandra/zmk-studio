@@ -160,9 +160,10 @@ function useLayouts(): [
 
 interface KeyboardProps {
   onKeymapChange?: (keymap: Keymap | undefined) => void;
+  onBehaviorsChange?: (behaviors: BehaviorMap) => void;
 }
 
-export default function Keyboard({ onKeymapChange }: KeyboardProps = {}) {
+export default function Keyboard({ onKeymapChange, onBehaviorsChange }: KeyboardProps = {}) {
   const [
     layouts,
     _setLayouts,
@@ -197,6 +198,11 @@ export default function Keyboard({ onKeymapChange }: KeyboardProps = {}) {
     number | undefined
   >(undefined);
   const behaviors = useBehaviors();
+
+  // Notify parent when behaviors change
+  useEffect(() => {
+    onBehaviorsChange?.(behaviors);
+  }, [behaviors, onBehaviorsChange]);
 
   const conn = useContext(ConnectionContext);
   const undoRedo = useContext(UndoRedoContext);

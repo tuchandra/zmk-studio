@@ -213,4 +213,199 @@ describe('BehaviorMapper', () => {
       expect(result2).toBe('&bt 2');
     });
   });
+
+  // ============================================================================
+  // Dynamic Behavior Registry Tests (for real keyboard behavior IDs)
+  // ============================================================================
+  describe('formatBindingWithRegistry', () => {
+    // Simulates a real keyboard's behavior registry where IDs don't match hardcoded values
+    // This is what keyboards like "Toucan" actually send
+    const mockBehaviorRegistry = new Map([
+      [8, { id: 8, displayName: 'Key Press', metadata: [] }],
+      [13, { id: 13, displayName: 'Layer-Tap', metadata: [] }],
+      [14, { id: 14, displayName: 'Mod-Tap', metadata: [] }],
+      [22, { id: 22, displayName: 'Momentary Layer', metadata: [] }],
+      [23, { id: 23, displayName: 'None', metadata: [] }],
+      [25, { id: 25, displayName: 'Toggle Layer', metadata: [] }],
+      [30, { id: 30, displayName: 'Bluetooth', metadata: [] }],
+      [99, { id: 99, displayName: 'Transparent', metadata: [] }],
+    ]);
+
+    it('should format key press with non-standard behavior ID', () => {
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 8, param1: 0x04, param2: null, position: 0 },
+        mockGetKeyName,
+        mockBehaviorRegistry
+      );
+      expect(result).toBe('&kp Q');
+    });
+
+    it('should format layer-tap with non-standard behavior ID', () => {
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 13, param1: 1, param2: 0x2B, position: 0 },
+        mockGetKeyName,
+        mockBehaviorRegistry
+      );
+      expect(result).toBe('&lt 1 TAB');
+    });
+
+    it('should format mod-tap with non-standard behavior ID', () => {
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 14, param1: 0xE0, param2: 0x04, position: 0 },
+        mockGetKeyName,
+        mockBehaviorRegistry
+      );
+      expect(result).toBe('&mt LCTRL Q');
+    });
+
+    it('should format momentary layer with non-standard behavior ID', () => {
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 22, param1: 2, param2: null, position: 0 },
+        mockGetKeyName,
+        mockBehaviorRegistry
+      );
+      expect(result).toBe('&mo 2');
+    });
+
+    it('should format none as &none', () => {
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 23, param1: 0, param2: null, position: 0 },
+        mockGetKeyName,
+        mockBehaviorRegistry
+      );
+      expect(result).toBe('&none');
+    });
+
+    it('should format toggle layer with non-standard behavior ID', () => {
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 25, param1: 3, param2: null, position: 0 },
+        mockGetKeyName,
+        mockBehaviorRegistry
+      );
+      expect(result).toBe('&tog 3');
+    });
+
+    it('should format bluetooth with non-standard behavior ID', () => {
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 30, param1: 1, param2: null, position: 0 },
+        mockGetKeyName,
+        mockBehaviorRegistry
+      );
+      expect(result).toBe('&bt 1');
+    });
+
+    it('should format transparent with non-standard behavior ID', () => {
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 99, param1: 0, param2: null, position: 0 },
+        mockGetKeyName,
+        mockBehaviorRegistry
+      );
+      expect(result).toBe('&trans');
+    });
+
+    it('should return unknown comment for behavior ID not in registry', () => {
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 999, param1: 0, param2: null, position: 0 },
+        mockGetKeyName,
+        mockBehaviorRegistry
+      );
+      expect(result).toBe('/* Unknown behavior 999 */');
+    });
+
+    it('should return unknown comment for unrecognized displayName', () => {
+      const registryWithUnknown = new Map([
+        [50, { id: 50, displayName: 'Custom Macro XYZ', metadata: [] }],
+      ]);
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 50, param1: 0, param2: null, position: 0 },
+        mockGetKeyName,
+        registryWithUnknown
+      );
+      expect(result).toBe('/* Unknown behavior: Custom Macro XYZ (id=50) */');
+    });
+
+    it('should fall back to hardcoded behaviors when registry is empty', () => {
+      const emptyRegistry = new Map();
+      const result = BehaviorMapper.formatBindingWithRegistry(
+        { behaviorId: 1, param1: 0x04, param2: null, position: 0 },
+        mockGetKeyName,
+        emptyRegistry
+      );
+      expect(result).toBe('&kp Q');
+    });
+  });
+
+  describe('getBehaviorCodeFromDisplayName', () => {
+    it('should map "Key Press" to "kp"', () => {
+      expect(BehaviorMapper.getBehaviorCodeFromDisplayName('Key Press')).toBe('kp');
+    });
+
+    it('should map "Mod-Tap" to "mt"', () => {
+      expect(BehaviorMapper.getBehaviorCodeFromDisplayName('Mod-Tap')).toBe('mt');
+    });
+
+    it('should map "Layer-Tap" to "lt"', () => {
+      expect(BehaviorMapper.getBehaviorCodeFromDisplayName('Layer-Tap')).toBe('lt');
+    });
+
+    it('should map "Momentary Layer" to "mo"', () => {
+      expect(BehaviorMapper.getBehaviorCodeFromDisplayName('Momentary Layer')).toBe('mo');
+    });
+
+    it('should map "Toggle Layer" to "tog"', () => {
+      expect(BehaviorMapper.getBehaviorCodeFromDisplayName('Toggle Layer')).toBe('tog');
+    });
+
+    it('should map "Transparent" to "trans"', () => {
+      expect(BehaviorMapper.getBehaviorCodeFromDisplayName('Transparent')).toBe('trans');
+    });
+
+    it('should map "None" to "none"', () => {
+      expect(BehaviorMapper.getBehaviorCodeFromDisplayName('None')).toBe('none');
+    });
+
+    it('should map "Bluetooth" to "bt"', () => {
+      expect(BehaviorMapper.getBehaviorCodeFromDisplayName('Bluetooth')).toBe('bt');
+    });
+
+    it('should return null for unrecognized display name', () => {
+      expect(BehaviorMapper.getBehaviorCodeFromDisplayName('Custom Unknown')).toBeNull();
+    });
+
+    it('should be case-insensitive', () => {
+      expect(BehaviorMapper.getBehaviorCodeFromDisplayName('key press')).toBe('kp');
+      expect(BehaviorMapper.getBehaviorCodeFromDisplayName('KEY PRESS')).toBe('kp');
+      expect(BehaviorMapper.getBehaviorCodeFromDisplayName('MOD-TAP')).toBe('mt');
+    });
+  });
+
+  describe('getParamCountFromDisplayName', () => {
+    it('should return 0 for Transparent', () => {
+      expect(BehaviorMapper.getParamCountFromDisplayName('Transparent')).toBe(0);
+    });
+
+    it('should return 0 for None', () => {
+      expect(BehaviorMapper.getParamCountFromDisplayName('None')).toBe(0);
+    });
+
+    it('should return 1 for Key Press', () => {
+      expect(BehaviorMapper.getParamCountFromDisplayName('Key Press')).toBe(1);
+    });
+
+    it('should return 1 for Momentary Layer', () => {
+      expect(BehaviorMapper.getParamCountFromDisplayName('Momentary Layer')).toBe(1);
+    });
+
+    it('should return 2 for Mod-Tap', () => {
+      expect(BehaviorMapper.getParamCountFromDisplayName('Mod-Tap')).toBe(2);
+    });
+
+    it('should return 2 for Layer-Tap', () => {
+      expect(BehaviorMapper.getParamCountFromDisplayName('Layer-Tap')).toBe(2);
+    });
+
+    it('should return 0 for unknown display name', () => {
+      expect(BehaviorMapper.getParamCountFromDisplayName('Unknown Behavior')).toBe(0);
+    });
+  });
 });

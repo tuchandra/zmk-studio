@@ -254,4 +254,150 @@ describe('KeymapGenerator', () => {
       expect(result).toContain('upper_case_layer {');
     });
   });
+
+  // ============================================================================
+  // Dynamic Behavior Registry Tests
+  // ============================================================================
+  describe('generateWithRegistry', () => {
+    // Simulates a real keyboard's behavior registry with non-standard IDs
+    const mockBehaviorRegistry = new Map([
+      [8, { id: 8, displayName: 'Key Press', metadata: [] }],
+      [13, { id: 13, displayName: 'Layer-Tap', metadata: [] }],
+      [22, { id: 22, displayName: 'Momentary Layer', metadata: [] }],
+      [99, { id: 99, displayName: 'Transparent', metadata: [] }],
+    ]);
+
+    const keymapWithNonStandardIds: Keymap = {
+      layers: [
+        {
+          id: 0,
+          label: 'BASE',
+          bindings: [
+            { behaviorId: 8, param1: (0x07 << 16) + 0x04, param2: null, position: 0 }, // Key Press (Q)
+            { behaviorId: 8, param1: (0x07 << 16) + 0x1A, param2: null, position: 1 }, // Key Press (W)
+            { behaviorId: 22, param1: 1, param2: null, position: 2 }, // Momentary Layer 1
+          ],
+        },
+        {
+          id: 1,
+          label: 'NAV',
+          bindings: [
+            { behaviorId: 99, param1: 0, param2: null, position: 0 }, // Transparent
+            { behaviorId: 13, param1: 2, param2: (0x07 << 16) + 0x2B, position: 1 }, // Layer-Tap
+            { behaviorId: 8, param1: (0x07 << 16) + 0x50, param2: null, position: 2 }, // Key Press (Left)
+          ],
+        },
+      ],
+      deviceName: 'Toucan',
+      layoutName: 'default',
+      timestamp: new Date('2026-02-01T10:00:00Z'),
+      version: '1.0.0',
+      totalBindings: 6,
+    };
+
+    it('should generate keymap using behavior registry instead of hardcoded IDs', () => {
+      const result = KeymapGenerator.generateWithRegistry(keymapWithNonStandardIds, mockBehaviorRegistry);
+
+      // Should contain proper key bindings, not "Unknown behavior 8"
+      expect(result).toContain('&kp');
+      expect(result).not.toContain('Unknown behavior 8');
+      expect(result).not.toContain('Unknown behavior 22');
+      expect(result).not.toContain('Unknown behavior 99');
+    });
+
+    it('should format key press with non-standard behavior ID', () => {
+      const result = KeymapGenerator.generateWithRegistry(keymapWithNonStandardIds, mockBehaviorRegistry);
+
+      // behaviorId 8 = "Key Press" should produce &kp
+      // HID 0x04 = A, HID 0x1A = W
+      expect(result).toContain('&kp A');
+      expect(result).toContain('&kp W');
+    });
+
+    it('should format momentary layer with non-standard behavior ID', () => {
+      const result = KeymapGenerator.generateWithRegistry(keymapWithNonStandardIds, mockBehaviorRegistry);
+
+      // behaviorId 22 = "Momentary Layer" should produce &mo
+      expect(result).toContain('&mo 1');
+    });
+
+    it('should format transparent with non-standard behavior ID', () => {
+      const result = KeymapGenerator.generateWithRegistry(keymapWithNonStandardIds, mockBehaviorRegistry);
+
+      // behaviorId 99 = "Transparent" should produce &trans
+      expect(result).toContain('&trans');
+    });
+
+    it('should format layer-tap with non-standard behavior ID', () => {
+      const result = KeymapGenerator.generateWithRegistry(keymapWithNonStandardIds, mockBehaviorRegistry);
+
+      // behaviorId 13 = "Layer-Tap" should produce &lt
+      expect(result).toContain('&lt 2 TAB');
+    });
+
+    it('should still generate proper metadata and structure', () => {
+      const result = KeymapGenerator.generateWithRegistry(keymapWithNonStandardIds, mockBehaviorRegistry);
+
+      // Should still have all the standard structure
+      expect(result).toContain('Exported from ZMK Studio');
+      expect(result).toContain('Device: Toucan');
+      expect(result).toContain('#include <behaviors.dtsi>');
+      expect(result).toContain('#define BASE 0');
+      expect(result).toContain('#define NAV 1');
+      expect(result).toContain('base_layer {');
+      expect(result).toContain('nav_layer {');
+    });
+
+    it('should fall back to hardcoded behaviors when registry is empty', () => {
+      const keymapWithStandardIds: Keymap = {
+        layers: [
+          {
+            id: 0,
+            label: 'Test',
+            bindings: [
+              { behaviorId: 1, param1: (0x07 << 16) + 0x04, param2: null, position: 0 }, // Standard kp ID
+              { behaviorId: 0, param1: 0, param2: null, position: 1 }, // Standard trans ID
+            ],
+          },
+        ],
+        deviceName: 'Test',
+        layoutName: 'default',
+        timestamp: new Date('2026-02-01T10:00:00Z'),
+        version: '1.0.0',
+        totalBindings: 2,
+      };
+
+      const emptyRegistry = new Map();
+      const result = KeymapGenerator.generateWithRegistry(keymapWithStandardIds, emptyRegistry);
+
+      // Should still work with hardcoded fallback
+      // HID 0x04 = A
+      expect(result).toContain('&kp A');
+      expect(result).toContain('&trans');
+    });
+  });
+
+  describe('generateLayerWithRegistry', () => {
+    const mockRegistry = new Map([
+      [8, { id: 8, displayName: 'Key Press', metadata: [] }],
+      [22, { id: 22, displayName: 'Momentary Layer', metadata: [] }],
+    ]);
+
+    it('should use registry to format bindings in layer', () => {
+      const layer: Layer = {
+        id: 0,
+        label: 'Test',
+        bindings: [
+          { behaviorId: 8, param1: (0x07 << 16) + 0x04, param2: null, position: 0 }, // HID 0x04 = A
+          { behaviorId: 22, param1: 1, param2: null, position: 1 },
+        ],
+      };
+
+      const result = KeymapGenerator.generateLayerWithRegistry(layer, mockRegistry);
+
+      expect(result).toContain('&kp A');
+      expect(result).toContain('&mo 1');
+      expect(result).not.toContain('Unknown behavior');
+    });
+  });
 });

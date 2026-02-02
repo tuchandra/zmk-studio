@@ -230,4 +230,124 @@ describe('ExportService', () => {
       (await import('./KeymapGenerator')).KeymapGenerator.generate = originalGenerate;
     });
   });
+
+  // ============================================================================
+  // Dynamic Behavior Registry Tests
+  // ============================================================================
+  describe('exportKeymapWithRegistry', () => {
+    // Simulate a real keyboard's behavior registry with non-standard IDs
+    const mockBehaviorRegistry = new Map([
+      [8, { id: 8, displayName: 'Key Press', metadata: [] }],
+      [22, { id: 22, displayName: 'Momentary Layer', metadata: [] }],
+      [99, { id: 99, displayName: 'Transparent', metadata: [] }],
+    ]);
+
+    const layersWithNonStandardIds: Layer[] = [
+      {
+        id: 0,
+        label: 'BASE',
+        bindings: [
+          { behaviorId: 8, param1: (0x07 << 16) + 0x04, param2: null, position: 0 }, // Key Press (A)
+          { behaviorId: 22, param1: 1, param2: null, position: 1 }, // Momentary Layer 1
+          { behaviorId: 99, param1: 0, param2: null, position: 2 }, // Transparent
+        ],
+      },
+      {
+        id: 1,
+        label: 'NAV',
+        bindings: [
+          { behaviorId: 8, param1: (0x07 << 16) + 0x50, param2: null, position: 0 }, // Key Press (LEFT)
+        ],
+      },
+    ];
+
+    it('should export keymap using behavior registry', async () => {
+      const result = await ExportService.exportKeymapWithRegistry(
+        'Toucan',
+        layersWithNonStandardIds,
+        mockBehaviorRegistry
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.content).toContain('Device: Toucan');
+      // Should NOT contain "Unknown behavior" since we provided a registry
+      expect(result.content).not.toContain('Unknown behavior 8');
+      expect(result.content).not.toContain('Unknown behavior 22');
+      expect(result.content).not.toContain('Unknown behavior 99');
+    });
+
+    it('should format behaviors correctly with non-standard IDs', async () => {
+      const result = await ExportService.exportKeymapWithRegistry(
+        'Toucan',
+        layersWithNonStandardIds,
+        mockBehaviorRegistry
+      );
+
+      expect(result.success).toBe(true);
+      // behaviorId 8 = "Key Press" should produce &kp
+      expect(result.content).toContain('&kp A');
+      expect(result.content).toContain('&kp LEFT');
+      // behaviorId 22 = "Momentary Layer" should produce &mo
+      expect(result.content).toContain('&mo 1');
+      // behaviorId 99 = "Transparent" should produce &trans
+      expect(result.content).toContain('&trans');
+    });
+
+    it('should validate inputs same as regular exportKeymap', async () => {
+      // Empty device name
+      const result1 = await ExportService.exportKeymapWithRegistry('', layersWithNonStandardIds, mockBehaviorRegistry);
+      expect(result1.success).toBe(false);
+      expect(result1.error?.code).toBe(ExportErrorCode.NO_KEYBOARD);
+
+      // Empty layers
+      const result2 = await ExportService.exportKeymapWithRegistry('Toucan', [], mockBehaviorRegistry);
+      expect(result2.success).toBe(false);
+      expect(result2.error?.code).toBe(ExportErrorCode.INVALID_LAYER);
+    });
+
+    it('should generate correct filename', async () => {
+      const result = await ExportService.exportKeymapWithRegistry(
+        'My Toucan Keyboard',
+        layersWithNonStandardIds,
+        mockBehaviorRegistry
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.filename).toMatch(/my-toucan-keyboard-\d{4}-\d{2}-\d{2}\.keymap/);
+    });
+
+    it('should trigger file download', async () => {
+      vi.clearAllMocks();
+
+      await ExportService.exportKeymapWithRegistry(
+        'Toucan',
+        layersWithNonStandardIds,
+        mockBehaviorRegistry
+      );
+
+      expect(mockCreateObjectURL).toHaveBeenCalled();
+      expect(mockClick).toHaveBeenCalled();
+      expect(mockRevokeObjectURL).toHaveBeenCalled();
+    });
+
+    it('should fall back to hardcoded behaviors when registry is empty', async () => {
+      const layersWithStandardIds: Layer[] = [
+        {
+          id: 0,
+          label: 'Test',
+          bindings: [
+            { behaviorId: 1, param1: (0x07 << 16) + 0x04, param2: null, position: 0 }, // Standard kp ID
+            { behaviorId: 0, param1: 0, param2: null, position: 1 }, // Standard trans ID
+          ],
+        },
+      ];
+
+      const emptyRegistry = new Map();
+      const result = await ExportService.exportKeymapWithRegistry('Test', layersWithStandardIds, emptyRegistry);
+
+      expect(result.success).toBe(true);
+      expect(result.content).toContain('&kp A');
+      expect(result.content).toContain('&trans');
+    });
+  });
 });

@@ -95,6 +95,39 @@ describe('App.tsx Export/Import Integration (RED PHASE)', () => {
     });
   });
 
+  describe('Behavior Registry Integration', () => {
+    it('should receive behaviors from Keyboard component via callback', async () => {
+      const fs = await import('fs');
+      const appSource = fs.readFileSync('./src/App.tsx', 'utf-8');
+
+      // Should have a callback to receive behaviors from Keyboard
+      expect(
+        appSource.includes('onBehaviorsChange') ||
+        appSource.includes('setBehaviorsForExport') ||
+        appSource.includes('behaviorsRef')
+      ).toBe(true);
+    });
+
+    it('should use exportKeymapWithRegistry for export', async () => {
+      const fs = await import('fs');
+      const appSource = fs.readFileSync('./src/App.tsx', 'utf-8');
+
+      // Should use the registry-aware export method
+      expect(appSource).toContain('exportKeymapWithRegistry');
+    });
+
+    it('should convert behaviors to BehaviorRegistry format', async () => {
+      const fs = await import('fs');
+      const appSource = fs.readFileSync('./src/App.tsx', 'utf-8');
+
+      // Should build a Map from the behaviors for the registry
+      expect(
+        appSource.includes('new Map') ||
+        appSource.includes('BehaviorRegistry')
+      ).toBe(true);
+    });
+  });
+
   describe('RPC Integration', () => {
     it('should NOT use getLayers (wrong API)', async () => {
       const fs = await import('fs');

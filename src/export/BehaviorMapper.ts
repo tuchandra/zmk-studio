@@ -8,13 +8,37 @@
 import { Behavior, Binding } from './types';
 
 /**
+ * Behavior registry entry from the keyboard's RPC response
+ */
+export interface BehaviorRegistryEntry {
+  id: number;
+  displayName: string;
+  metadata: unknown[];
+}
+
+/**
+ * Map displayName from keyboard to ZMK behavior code
+ * Case-insensitive matching
+ */
+const DISPLAY_NAME_TO_CODE: Record<string, { code: string; paramCount: number }> = {
+  'key press': { code: 'kp', paramCount: 1 },
+  'mod-tap': { code: 'mt', paramCount: 2 },
+  'layer-tap': { code: 'lt', paramCount: 2 },
+  'momentary layer': { code: 'mo', paramCount: 1 },
+  'toggle layer': { code: 'tog', paramCount: 1 },
+  'transparent': { code: 'trans', paramCount: 0 },
+  'none': { code: 'none', paramCount: 0 },
+  'bluetooth': { code: 'bt', paramCount: 1 },
+};
+
+/**
  * Known ZMK behaviors with their parameter counts
  *
  * NOTE: These mappings are assumptions based on ZMK firmware conventions.
- * Actual behaviorId values MUST be validated against real keyboard responses
- * (see tasks T011a-c in implementation plan).
+ * For real keyboards, use formatBindingWithRegistry() which uses the
+ * keyboard's actual behavior registry instead of these hardcoded values.
  *
- * Expected mapping (to be validated):
+ * Fallback mapping:
  * - 0: trans (transparent) - pass-through to lower layer
  * - 1: kp (key press) - basic key press
  * - 2: mt (mod-tap) - modifier when held, key when tapped
@@ -174,5 +198,136 @@ export class BehaviorMapper {
    */
   static getAllBehaviors(): Map<number, Behavior> {
     return new Map(BEHAVIORS);
+  }
+
+  /**
+   * Get ZMK behavior code from display name
+   *
+   * @param displayName - Human-readable behavior name from keyboard (e.g., "Key Press")
+   * @returns ZMK behavior code (e.g., "kp") or null if unrecognized
+   */
+  static getBehaviorCodeFromDisplayName(displayName: string): string | null {
+    const mapping = DISPLAY_NAME_TO_CODE[displayName.toLowerCase()];
+    return mapping?.code ?? null;
+  }
+
+  /**
+   * Get parameter count from display name
+   *
+   * @param displayName - Human-readable behavior name from keyboard
+   * @returns Number of parameters (0, 1, or 2)
+   */
+  static getParamCountFromDisplayName(displayName: string): number {
+    const mapping = DISPLAY_NAME_TO_CODE[displayName.toLowerCase()];
+    return mapping?.paramCount ?? 0;
+  }
+
+  /**
+   * Format a binding using a dynamic behavior registry from the keyboard
+   *
+   * This method uses the keyboard's actual behavior registry instead of
+   * hardcoded behavior IDs, which allows proper export for keyboards
+   * with non-standard behavior ID assignments.
+   *
+   * @param binding - Binding object with behaviorId and parameters
+   * @param getKeyName - Function to convert HID usage codes to key names
+   * @param behaviorRegistry - Map of behavior ID to metadata from keyboard RPC
+   * @returns ZMK binding string (e.g., "&kp A")
+   */
+  static formatBindingWithRegistry(
+    binding: Binding,
+    getKeyName: (hidUsage: number) => string | null,
+    behaviorRegistry: Map<number, BehaviorRegistryEntry>
+  ): string {
+    // First, try to find the behavior in the keyboard's registry
+    const registryEntry = behaviorRegistry.get(binding.behaviorId);
+
+    if (registryEntry) {
+      const code = this.getBehaviorCodeFromDisplayName(registryEntry.displayName);
+      const paramCount = this.getParamCountFromDisplayName(registryEntry.displayName);
+
+      if (code) {
+        return this.formatWithCode(binding, code, paramCount, getKeyName);
+      }
+
+      // Recognized behavior ID but unrecognized displayName
+      return `/* Unknown behavior: ${registryEntry.displayName} (id=${binding.behaviorId}) */`;
+    }
+
+    // Fall back to hardcoded behaviors if registry is empty or doesn't have this ID
+    const hardcodedBehavior = BEHAVIORS.get(binding.behaviorId);
+    if (hardcodedBehavior) {
+      return this.formatWithCode(binding, hardcodedBehavior.code, hardcodedBehavior.paramCount, getKeyName);
+    }
+
+    return `/* Unknown behavior ${binding.behaviorId} */`;
+  }
+
+  /**
+   * Format a binding given a known behavior code and parameter count
+   */
+  private static formatWithCode(
+    binding: Binding,
+    code: string,
+    paramCount: number,
+    getKeyName: (hidUsage: number) => string | null
+  ): string {
+    // No-parameter behaviors
+    if (code === 'trans') {
+      return '&trans';
+    }
+    if (code === 'none') {
+      return '&none';
+    }
+
+    // Single parameter behaviors
+    if (paramCount === 1) {
+      const param = this.formatParamByCode(binding.param1, code, getKeyName);
+      return `&${code} ${param}`;
+    }
+
+    // Two parameter behaviors
+    if (paramCount === 2) {
+      // Layer-tap: param1 is layer number, param2 is key
+      if (code === 'lt') {
+        const layerNum = binding.param1.toString();
+        const keyName = binding.param2 !== null && binding.param2 !== undefined
+          ? (getKeyName(binding.param2) || `/* HID 0x${binding.param2.toString(16)} */`)
+          : '/* missing key */';
+        return `&lt ${layerNum} ${keyName}`;
+      }
+
+      // Mod-tap: both params are keys/modifiers
+      const param1 = this.formatParamByCode(binding.param1, code, getKeyName);
+      const param2 = binding.param2 !== null && binding.param2 !== undefined
+        ? this.formatParamByCode(binding.param2, code, getKeyName)
+        : '/* missing param2 */';
+      return `&${code} ${param1} ${param2}`;
+    }
+
+    return `&${code}`;
+  }
+
+  /**
+   * Format a parameter value based on behavior code
+   */
+  private static formatParamByCode(
+    value: number,
+    code: string,
+    getKeyName: (hidUsage: number) => string | null
+  ): string {
+    // For key press and mod-tap behaviors, convert HID code to key name
+    if (code === 'kp' || code === 'mt') {
+      const keyName = getKeyName(value);
+      return keyName || `/* HID 0x${value.toString(16)} */`;
+    }
+
+    // For layer behaviors (mo, tog), return layer number
+    if (code === 'mo' || code === 'tog') {
+      return value.toString();
+    }
+
+    // For Bluetooth and others, return the numeric value
+    return value.toString();
   }
 }
