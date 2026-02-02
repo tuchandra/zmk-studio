@@ -25,6 +25,8 @@ const HID_PAGE_CONSUMER = 0x0C;
  */
 const CONSUMER_KEY_MAP: Record<number, string> = {
   // Media playback controls
+  179: 'C_FF',           // Fast Forward
+  180: 'C_RW',           // Rewind
   181: 'C_NEXT',         // Scan Next Track
   182: 'C_PREV',         // Scan Previous Track
   183: 'C_STOP',         // Stop

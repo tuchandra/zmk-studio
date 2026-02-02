@@ -465,6 +465,26 @@ describe('HidMapper', () => {
         // Consumer page 0x0C, ID 184 (0xB8)
         expect(HidMapper.getZmkKeyName(hid(CONSUMER, 184))).toBe('C_EJECT');
       });
+
+      it('should convert Fast Forward to C_FF', () => {
+        // Consumer page 0x0C, ID 179 (0xB3)
+        expect(HidMapper.getZmkKeyName(hid(CONSUMER, 179))).toBe('C_FF');
+      });
+
+      it('should convert Rewind to C_RW', () => {
+        // Consumer page 0x0C, ID 180 (0xB4)
+        expect(HidMapper.getZmkKeyName(hid(CONSUMER, 180))).toBe('C_RW');
+      });
+
+      it('should convert 0xc00b3 to C_FF', () => {
+        // Real-world HID code from Toucan func layer
+        expect(HidMapper.getZmkKeyNameWithModifiers(0xc00b3)).toBe('C_FF');
+      });
+
+      it('should convert 0xc00b4 to C_RW', () => {
+        // Real-world HID code from Toucan func layer
+        expect(HidMapper.getZmkKeyNameWithModifiers(0xc00b4)).toBe('C_RW');
+      });
     });
 
     describe('getZmkKeyNameWithModifiers with consumer keys', () => {
