@@ -498,6 +498,7 @@ function App() {
               onDisconnect={disconnect}
               onResetSettings={resetSettings}
               onExport={exportKeymap}
+              onCopyToClipboard={copyKeymapToClipboard}
               isExporting={isExporting}
               onImport={importKeymap}
               isImporting={isImporting}

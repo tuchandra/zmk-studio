@@ -16,6 +16,7 @@ import { ChevronDown, Undo2, Redo2, Save, Trash2 } from "lucide-react";
 import { Tooltip } from "./misc/Tooltip";
 import { GenericModal } from "./GenericModal";
 import { ExportButton } from "./export/ExportButton";
+import { CopyButton } from "./export/CopyButton";
 import { ImportButton } from "./import/ImportButton";
 
 export interface AppHeaderProps {
@@ -27,6 +28,7 @@ export interface AppHeaderProps {
   onResetSettings?: () => void | Promise<void>;
   onDisconnect?: () => void | Promise<void>;
   onExport?: () => void | Promise<void>;
+  onCopyToClipboard?: () => void | Promise<void>;
   onImport?: (file: File) => void | Promise<void>;
   canUndo?: boolean;
   canRedo?: boolean;
@@ -45,6 +47,7 @@ export const AppHeader = ({
   onDisconnect,
   onResetSettings,
   onExport,
+  onCopyToClipboard,
   onImport,
   isExporting = false,
   isImporting = false,
@@ -178,6 +181,12 @@ export const AppHeader = ({
           <ImportButton
             onImport={onImport}
             isImporting={isImporting}
+            disabled={!connectedDeviceLabel}
+          />
+        )}
+        {onCopyToClipboard && (
+          <CopyButton
+            onCopy={onCopyToClipboard}
             disabled={!connectedDeviceLabel}
           />
         )}
